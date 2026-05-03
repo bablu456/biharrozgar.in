@@ -1,0 +1,72 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Noto+Sans+Devanagari:wght@400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --font-noto-sans: 'Plus Jakarta Sans', 'Noto Sans Devanagari', sans-serif;
+}
+
+@layer base {
+  body {
+    @apply bg-slate-50 text-slate-900 font-sans antialiased selection:bg-bihar-green selection:text-white;
+  }
+}
+
+@layer components {
+  .glass-card {
+    @apply bg-white/70 backdrop-blur-xl border border-white shadow-[0_8px_30px_rgb(0,0,0,0.04)] transition-all duration-300;
+  }
+  
+  .glass-panel {
+    @apply bg-white/40 backdrop-blur-2xl border border-white/60 shadow-[0_8px_32px_rgba(31,38,135,0.07)] rounded-[2.5rem];
+  }
+
+  .mesh-bg {
+    background-color: #fafafa;
+    background-image: 
+      radial-gradient(at 10% 20%, hsla(160, 84%, 39%, 0.15) 0px, transparent 50%),
+      radial-gradient(at 80% 10%, hsla(43, 96%, 56%, 0.15) 0px, transparent 50%),
+      radial-gradient(at 40% 80%, hsla(338, 90%, 60%, 0.1) 0px, transparent 50%);
+  }
+  
+  .btn-primary {
+    @apply bg-gradient-to-r from-bihar-green to-bihar-green-dark text-white px-8 py-4 rounded-2xl font-bold 
+           hover:shadow-[0_8px_25px_rgba(16,185,129,0.3)] hover:-translate-y-1 transition-all duration-300 
+           active:scale-[0.98] flex items-center justify-center gap-2;
+  }
+  
+  .btn-secondary {
+    @apply bg-gradient-to-r from-bihar-yellow to-bihar-yellow-dark text-white px-8 py-4 rounded-2xl font-bold 
+           hover:shadow-[0_8px_25px_rgba(245,158,11,0.3)] hover:-translate-y-1 transition-all duration-300 
+           active:scale-[0.98] flex items-center justify-center gap-2;
+  }
+  
+  .btn-outline {
+    @apply border-2 border-bihar-green text-bihar-green px-8 py-4 rounded-2xl font-bold 
+           hover:bg-bihar-green hover:text-white transition-all duration-300 
+           hover:shadow-[0_8px_25px_rgba(16,185,129,0.2)] active:scale-[0.98] flex items-center justify-center gap-2;
+  }
+
+  .input-field {
+    @apply w-full px-5 py-4 border-2 border-slate-100 rounded-2xl focus:ring-4 focus:ring-bihar-green/20 focus:border-bihar-green outline-none transition-all bg-white/90 backdrop-blur-md shadow-sm;
+  }
+
+  .card {
+    @apply bg-white rounded-3xl shadow-[0_2px_20px_rgb(0,0,0,0.04)] border border-slate-100 p-8 
+           hover:shadow-[0_20px_40px_rgb(0,0,0,0.08)] hover:border-bihar-green/20 transition-all duration-500 hover:-translate-y-2;
+  }
+
+  .badge-featured {
+    @apply bg-gradient-to-r from-amber-100 to-amber-50 text-amber-600 border border-amber-200 px-4 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider shadow-sm;
+  }
+
+  .badge-urgent {
+    @apply bg-gradient-to-r from-rose-100 to-rose-50 text-rose-600 border border-rose-200 px-4 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider shadow-sm animate-pulse;
+  }
+
+  .section-padding {
+    @apply py-24 md:py-32;
+  }
+}
