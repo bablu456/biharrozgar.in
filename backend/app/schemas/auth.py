@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+import re
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -8,6 +9,78 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from app.core.security import normalize_phone_number
 from app.models.enums import UserRole
 from app.schemas.profile import ProfileRead
+
+PASSWORD_UPPERCASE_PATTERN = re.compile(r"[A-Z]")
+PASSWORD_LOWERCASE_PATTERN = re.compile(r"[a-z]")
+PASSWORD_NUMBER_PATTERN = re.compile(r"\d")
+PASSWORD_SPECIAL_PATTERN = re.compile(r"[^A-Za-z0-9]")
+
+
+class UserRegisterRequest(BaseModel):
+    email: str = Field(..., max_length=255, examples=["user@example.com"])
+    phone_number: str = Field(
+        ...,
+        description="Phone number in 10-digit local or full E.164 format.",
+        examples=["9876543210", "+919876543210"],
+    )
+    password: str = Field(..., min_length=8, max_length=128)
+
+    @field_validator("email")
+    @classmethod
+    def normalize_email(cls, value: str) -> str:
+        email = value.strip().lower()
+        if not email or "@" not in email:
+            raise ValueError("Email must be a valid email address.")
+        return email
+
+    @field_validator("phone_number")
+    @classmethod
+    def validate_phone_number(cls, value: str) -> str:
+        return normalize_phone_number(value)
+
+    @field_validator("password")
+    @classmethod
+    def validate_password_strength(cls, value: str) -> str:
+        if len(value) < 8:
+            raise ValueError("Password must be at least 8 characters long.")
+        if not PASSWORD_UPPERCASE_PATTERN.search(value):
+            raise ValueError("Password must include at least one uppercase letter.")
+        if not PASSWORD_LOWERCASE_PATTERN.search(value):
+            raise ValueError("Password must include at least one lowercase letter.")
+        if not PASSWORD_NUMBER_PATTERN.search(value):
+            raise ValueError("Password must include at least one number.")
+        if not PASSWORD_SPECIAL_PATTERN.search(value):
+            raise ValueError("Password must include at least one special character.")
+        return value
+
+
+class UserLoginRequest(BaseModel):
+    identifier: str = Field(
+        ...,
+        description="Either the account email address or phone number.",
+        examples=["user@example.com", "9876543210", "+919876543210"],
+    )
+    password: str = Field(..., min_length=1, max_length=128)
+
+    @field_validator("identifier")
+    @classmethod
+    def normalize_identifier(cls, value: str) -> str:
+        identifier = value.strip()
+        if not identifier:
+            raise ValueError("Identifier is required.")
+
+        if "@" in identifier:
+            return identifier.lower()
+
+        return normalize_phone_number(identifier)
+
+    @field_validator("password")
+    @classmethod
+    def validate_password(cls, value: str) -> str:
+        cleaned = value.strip()
+        if not cleaned:
+            raise ValueError("Password is required.")
+        return value
 
 
 class PhoneNumberPayload(BaseModel):
@@ -76,7 +149,8 @@ class UserRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: UUID
-    phone: str
+    email: str
+    phone_number: str
     is_active: bool
     phone_verified_at: datetime | None = None
     last_login_at: datetime | None = None

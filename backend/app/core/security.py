@@ -11,8 +11,10 @@ from uuid import uuid4
 
 import jwt
 from jwt import InvalidTokenError
+from passlib.context import CryptContext
 
 PHONE_PATTERN = re.compile(r"^\+[1-9]\d{9,14}$")
+PASSWORD_CONTEXT = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
 class TokenValidationError(ValueError):
@@ -65,6 +67,14 @@ def verify_otp_code(
         secret_key=secret_key,
     )
     return hmac.compare_digest(computed_hash, expected_hash)
+
+
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    return PASSWORD_CONTEXT.verify(plain_password, hashed_password)
+
+
+def get_password_hash(password: str) -> str:
+    return PASSWORD_CONTEXT.hash(password)
 
 
 def create_jwt_token(

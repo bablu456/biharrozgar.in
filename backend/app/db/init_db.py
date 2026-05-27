@@ -1,10 +1,11 @@
 import asyncio
 import logging
 
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.session import SessionLocal, engine
-from app.models.base import Base
+from app.db.base import Base
+from app.db.session import AsyncSessionFactory, engine
 from app.models.category import Category
 from app.models.location import District
 
@@ -44,12 +45,13 @@ DISTRICTS = [
 
 async def init_db():
     async with engine.begin() as conn:
+        logger.info("Ensuring pgvector extension is installed...")
+        await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
         # Create tables
         logger.info("Creating tables...")
         await conn.run_sync(Base.metadata.create_all)
     
-    async with SessionLocal() as session:
-        # Seed categories
+    async with AsyncSessionFactory() as session:        # Seed categories
         logger.info("Seeding categories...")
         for cat_data in CATEGORIES:
             from sqlalchemy import select

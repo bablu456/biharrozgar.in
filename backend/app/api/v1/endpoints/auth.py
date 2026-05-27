@@ -1,77 +1,141 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, status
+from datetime import timedelta
 
+from fastapi import APIRouter, status
+from fastapi import HTTPException
+from passlib.exc import UnknownHashError
+from sqlalchemy.exc import IntegrityError
+
+from app.core.config import get_settings
+from app.core.security import create_jwt_token, get_password_hash, utc_now, verify_password
+from app.crud import user as user_crud
 from app.dependencies.auth import CurrentUser
 from app.dependencies.database import DatabaseSession
+from app.models.enums import UserRole
+from app.models.profile import Profile
+from app.models.user import User
 from app.schemas.auth import (
-    AuthResponse,
     AuthenticatedSession,
-    LoginVerifyRequest,
-    OTPChallengeResponse,
-    OTPRequest,
     RefreshTokenRequest,
-    RegisterVerifyRequest,
     TokenPair,
+    UserLoginRequest,
+    UserRegisterRequest,
 )
-from app.schemas.profile import ProfileUpdate
 from app.services import auth as auth_service
 
-router = APIRouter(prefix="/auth", tags=["Authentication"])
+settings = get_settings()
+router = APIRouter()
 
 
-@router.post(
-    "/register/request-otp",
-    response_model=OTPChallengeResponse,
-    status_code=status.HTTP_202_ACCEPTED,
-)
-async def request_registration_otp(
-    payload: OTPRequest,
-    session: DatabaseSession,
-) -> OTPChallengeResponse:
-    return await auth_service.request_registration_otp(
-        session,
-        phone_number=payload.phone,
+def _profile_role_as_string(user: User) -> str | None:
+    if user.profile is None:
+        return None
+
+    role = user.profile.role
+    return role.value if isinstance(role, UserRole) else str(role)
+
+
+def _build_token_pair(user: User) -> TokenPair:
+    role = _profile_role_as_string(user)
+
+    access_token, access_expires_at = create_jwt_token(
+        subject=str(user.id),
+        token_type="access",
+        secret_key=settings.jwt_secret_key.get_secret_value(),
+        algorithm=settings.jwt_algorithm,
+        expires_delta=timedelta(minutes=settings.access_token_expire_minutes),
+        role=role,
+    )
+    refresh_token, refresh_expires_at = create_jwt_token(
+        subject=str(user.id),
+        token_type="refresh",
+        secret_key=settings.jwt_refresh_secret_key.get_secret_value(),
+        algorithm=settings.jwt_algorithm,
+        expires_delta=timedelta(days=settings.refresh_token_expire_days),
+        role=role,
+    )
+
+    return TokenPair(
+        access_token=access_token,
+        refresh_token=refresh_token,
+        access_token_expires_at=access_expires_at,
+        refresh_token_expires_at=refresh_expires_at,
     )
 
 
 @router.post(
-    "/register/verify-otp",
-    response_model=AuthResponse,
+    "/register",
+    response_model=TokenPair,
     status_code=status.HTTP_201_CREATED,
 )
-async def verify_registration_otp(
-    payload: RegisterVerifyRequest,
+async def register_user(
+    payload: UserRegisterRequest,
     session: DatabaseSession,
-) -> AuthResponse:
-    return await auth_service.verify_registration(session, payload=payload)
+) -> TokenPair:
+    existing_email_user = await user_crud.get_user_by_email_or_phone(session, payload.email)
+    if existing_email_user is not None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="An account with this email already exists.",
+        )
 
+    existing_phone_user = await user_crud.get_user_by_email_or_phone(session, payload.phone_number)
+    if existing_phone_user is not None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="An account with this phone number already exists.",
+        )
 
-@router.post(
-    "/login/request-otp",
-    response_model=OTPChallengeResponse,
-    status_code=status.HTTP_202_ACCEPTED,
-)
-async def request_login_otp(
-    payload: OTPRequest,
-    session: DatabaseSession,
-) -> OTPChallengeResponse:
-    return await auth_service.request_login_otp(
-        session,
-        phone_number=payload.phone,
+    user = User(
+        email=payload.email,
+        phone_number=payload.phone_number,
+        hashed_password=get_password_hash(payload.password),
+        last_login_at=utc_now(),
     )
+    session.add(user)
+
+    try:
+        await session.flush()
+        profile = Profile(id=user.id, phone=payload.phone_number)
+        user.profile = profile
+        await session.commit()
+    except IntegrityError:
+        await session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="An account with this email or phone number already exists.",
+        ) from None
+
+    return _build_token_pair(user)
 
 
-@router.post("/login/verify-otp", response_model=AuthResponse)
-async def verify_login_otp(
-    payload: LoginVerifyRequest,
+@router.post("/login", response_model=TokenPair)
+async def login_user(
+    payload: UserLoginRequest,
     session: DatabaseSession,
-) -> AuthResponse:
-    return await auth_service.verify_login(
-        session,
-        phone_number=payload.phone,
-        otp_code=payload.otp_code,
-    )
+) -> TokenPair:
+    user = await user_crud.get_user_by_email_or_phone(session, payload.identifier)
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid credentials.",
+        )
+
+    try:
+        is_password_valid = verify_password(payload.password, user.hashed_password)
+    except UnknownHashError:
+        is_password_valid = False
+
+    if not is_password_valid:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid credentials.",
+        )
+
+    user.last_login_at = utc_now()
+    await session.commit()
+    return _build_token_pair(user)
 
 
 @router.post("/refresh", response_model=TokenPair)
@@ -88,16 +152,3 @@ async def refresh_access_token(
 @router.get("/me", response_model=AuthenticatedSession)
 async def read_current_session(current_user: CurrentUser) -> AuthenticatedSession:
     return auth_service.build_authenticated_session(current_user)
-
-
-@router.patch("/me/profile", response_model=AuthenticatedSession)
-async def update_my_profile(
-    payload: ProfileUpdate,
-    current_user: CurrentUser,
-    session: DatabaseSession,
-) -> AuthenticatedSession:
-    return await auth_service.update_current_profile(
-        session,
-        user=current_user,
-        payload=payload,
-    )

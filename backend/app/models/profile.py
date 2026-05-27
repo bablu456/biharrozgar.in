@@ -13,6 +13,9 @@ from app.models.base import Base, TimestampMixin
 from app.models.enums import UserRole
 
 if TYPE_CHECKING:
+    from app.models.application import Application
+    from app.models.job import Job
+    from app.models.recommendation import JobRecommendation
     from app.models.user import User
 
 
@@ -71,4 +74,7 @@ class Profile(TimestampMixin, Base):
     )
     applications: Mapped[list[Application]] = relationship(
         "Application", back_populates="applicant", cascade="all, delete-orphan"
+    )
+    job_recommendations: Mapped[list[JobRecommendation]] = relationship(
+        "JobRecommendation", back_populates="user", cascade="all, delete-orphan"
     )

@@ -12,7 +12,10 @@ from app.models.base import Base, TimestampMixin
 from app.models.enums import ApplicationMethod, JobStatus, JobType, SalaryType
 
 if TYPE_CHECKING:
+    from app.models.application import Application
+    from app.models.job_embedding import JobEmbedding
     from app.models.profile import Profile
+    from app.models.recommendation import JobRecommendation
 
 
 class Job(TimestampMixin, Base):
@@ -69,4 +72,10 @@ class Job(TimestampMixin, Base):
     approver: Mapped[Profile | None] = relationship("Profile", foreign_keys=[approved_by])
     applications: Mapped[list[Application]] = relationship(
         "Application", back_populates="job", cascade="all, delete-orphan"
+    )
+    recommendations: Mapped[list[JobRecommendation]] = relationship(
+        "JobRecommendation", back_populates="job", cascade="all, delete-orphan"
+    )
+    embedding: Mapped[JobEmbedding | None] = relationship(
+        "JobEmbedding", back_populates="job", uselist=False, cascade="all, delete-orphan"
     )
