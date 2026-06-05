@@ -56,7 +56,10 @@ class OpenRouterGateway:
         extra_payload: dict[str, Any] | None = None,
     ) -> str:
         if not self.api_key:
-            raise AIConfigurationError("OPENROUTER_API_KEY is not configured.")
+            raise AIConfigurationError(
+                "OPENROUTER_API_KEY is not configured. Add it to backend/.env or "
+                "the backend environment, then restart the server."
+            )
 
         candidate_model_ids = _deduplicate_models(model_ids)
         if not candidate_model_ids:
@@ -113,7 +116,10 @@ class OpenRouterGateway:
         input_type: str | None = None,
     ) -> list[list[float]]:
         if not self.api_key:
-            raise AIConfigurationError("OPENROUTER_API_KEY is not configured.")
+            raise AIConfigurationError(
+                "OPENROUTER_API_KEY is not configured. Add it to backend/.env or "
+                "the backend environment, then restart the server."
+            )
         if not texts:
             return []
 

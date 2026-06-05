@@ -3,7 +3,6 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { Briefcase, Heart, Bell, User, Plus, ArrowRight } from 'lucide-react';
-import { GoogleAccountCard } from '@/components/auth/GoogleAccountCard';
 import { Button } from '@/components/ui/Button';
 import { apiFetch } from '@/lib/api';
 import type { Job, Application } from '@/types';
@@ -18,7 +17,9 @@ export default function SeekerDashboard() {
     const fetchData = async () => {
       try {
         const [profile, appsRes] = await Promise.all([
-          apiFetch<{ full_name: string; role: string }>('/auth/me').then(res => res.profile),
+          apiFetch<{ profile: { full_name: string; role: string } }>('/auth/me').then(
+            (res) => res.profile
+          ),
           apiFetch<Application[]>('/applications/my'),
         ]);
 
@@ -151,9 +152,6 @@ export default function SeekerDashboard() {
           </div>
         </div>
 
-        <div className="mt-8">
-          <GoogleAccountCard />
-        </div>
       </div>
     </div>
   );

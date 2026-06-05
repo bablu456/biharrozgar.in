@@ -36,6 +36,16 @@ async def get_by_phone(session: AsyncSession, phone_number: str) -> User | None:
     return result.scalar_one_or_none()
 
 
+async def get_by_email(session: AsyncSession, email: str) -> User | None:
+    statement = (
+        select(User)
+        .options(selectinload(User.profile))
+        .where(User.email == email.strip().lower())
+    )
+    result = await session.execute(statement)
+    return result.scalar_one_or_none()
+
+
 async def get_user_by_email_or_phone(session: AsyncSession, identifier: str) -> User | None:
     normalized_identifier = identifier.strip()
     if "@" in normalized_identifier:
@@ -97,9 +107,15 @@ async def create_with_profile(
     return user
 
 
-async def mark_logged_in(session: AsyncSession, user: User) -> User:
+async def mark_logged_in(
+    session: AsyncSession,
+    user: User,
+    *,
+    verify_phone: bool = False,
+) -> User:
     now = utc_now()
     user.last_login_at = now
-    user.phone_verified_at = user.phone_verified_at or now
+    if verify_phone:
+        user.phone_verified_at = user.phone_verified_at or now
     await session.flush()
     return user

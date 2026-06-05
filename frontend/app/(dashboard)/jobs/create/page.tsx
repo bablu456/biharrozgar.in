@@ -13,7 +13,21 @@ export default function CreateJobPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({
-// ... existing state ...
+    title: '',
+    description: '',
+    requirements: '',
+    category: '',
+    job_type: 'full-time',
+    district: '',
+    city: '',
+    salary_min: '',
+    salary_max: '',
+    salary_type: 'monthly',
+    is_fresher_friendly: false,
+    application_method: 'whatsapp',
+    whatsapp_number: '',
+    application_link: '',
+    apply_instructions: '',
   });
 
   const handleSubmit = async (e: React.FormEvent) => {

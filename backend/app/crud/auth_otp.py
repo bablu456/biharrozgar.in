@@ -12,13 +12,13 @@ from app.models.enums import OtpPurpose
 async def get_latest_pending(
     session: AsyncSession,
     *,
-    phone_number: str,
+    recipient: str,
     purpose: OtpPurpose,
 ) -> AuthOTP | None:
     statement = (
         select(AuthOTP)
         .where(
-            AuthOTP.phone == phone_number,
+            AuthOTP.phone == recipient,
             AuthOTP.purpose == purpose,
             AuthOTP.consumed_at.is_(None),
         )
@@ -32,13 +32,13 @@ async def get_latest_pending(
 async def create(
     session: AsyncSession,
     *,
-    phone_number: str,
+    recipient: str,
     purpose: OtpPurpose,
     code_hash: str,
     expires_at: datetime,
 ) -> AuthOTP:
     otp = AuthOTP(
-        phone=phone_number,
+        phone=recipient,
         purpose=purpose,
         code_hash=code_hash,
         expires_at=expires_at,

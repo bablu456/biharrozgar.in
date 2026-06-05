@@ -1,88 +1,132 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { FormEvent, useState } from 'react';
 import Link from 'next/link';
-import { useRouter, useSearchParams } from 'next/navigation';
-import { ArrowRight, Phone } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { ArrowLeft, ArrowRight, KeyRound, Mail, Phone } from 'lucide-react';
 
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
-import { buildAuthCallbackUrl, getDashboardRoute } from '@/lib/auth';
-import { requestLoginOtp, verifyLoginOtp } from '@/lib/api-auth';
+import { getDashboardRoute } from '@/lib/auth';
+import {
+  loginWithPassword,
+  requestEmailLoginOtp,
+  requestPhoneLoginOtp,
+  verifyEmailLoginOtp,
+  verifyPhoneLoginOtp,
+} from '@/lib/api-auth';
 
-function GoogleIcon() {
-  return (
-    <svg aria-hidden="true" className="w-5 h-5" viewBox="0 0 24 24">
-      <path
-        fill="#EA4335"
-        d="M12 10.2v3.9h5.5c-.2 1.3-1.6 3.9-5.5 3.9-3.3 0-6.1-2.8-6.1-6.2s2.8-6.2 6.1-6.2c1.9 0 3.2.8 3.9 1.5l2.7-2.6C16.8 2.8 14.6 2 12 2 6.9 2 2.8 6.3 2.8 11.8S6.9 21.6 12 21.6c6.9 0 9.1-4.9 9.1-7.4 0-.5-.1-.9-.1-1.3H12Z"
-      />
-      <path
-        fill="#34A853"
-        d="M2.8 7.4 6 9.8c.9-2 3-4.2 6-4.2 1.9 0 3.2.8 3.9 1.5l2.7-2.6C16.8 2.8 14.6 2 12 2 8 2 4.6 4.2 2.8 7.4Z"
-      />
-      <path
-        fill="#FBBC05"
-        d="M12 21.6c2.5 0 4.7-.8 6.3-2.3l-3.1-2.5c-.8.6-1.9 1.2-3.2 1.2-3.9 0-5.3-2.6-5.5-3.9l-3.1 2.4c1.8 3.4 5.2 5.7 8.6 5.7Z"
-      />
-      <path
-        fill="#4285F4"
-        d="M21.1 14.2c.1-.4.1-.8.1-1.3 0-.4 0-.8-.1-1.2H12v3.9h5.5c-.3 1.3-1.2 2.5-2.3 3.3l3.1 2.5c1.8-1.7 2.8-4.2 2.8-7.2Z"
-      />
-    </svg>
-  );
+type LoginStep =
+  | 'method'
+  | 'email-method'
+  | 'email-password'
+  | 'email-otp'
+  | 'phone-otp';
+
+function getMessage(error: unknown): string {
+  return error instanceof Error ? error.message : 'Unable to complete login. Please try again.';
 }
 
 export default function LoginPage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
+  const [step, setStep] = useState<LoginStep>('method');
+  const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
-  const [otpSent, setOtpSent] = useState(false);
+  const [password, setPassword] = useState('');
   const [otp, setOtp] = useState('');
+  const [otpSent, setOtpSent] = useState(false);
+  const [debugOtp, setDebugOtp] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  useEffect(() => {
-    if (searchParams.get('error') === 'google-login-failed') {
-      setError('Google login could not be completed. Please try again.');
-    }
-  }, [searchParams]);
-
-  const handleGoogleLogin = async () => {
-    // OAuth needs more work for the custom backend, keeping placeholder
-    setError('Google login is temporarily disabled. Please use phone OTP.');
+  const resetStatus = () => {
+    setError('');
+    setOtp('');
+    setOtpSent(false);
+    setDebugOtp('');
   };
 
-  const handleSendOTP = async (event: React.FormEvent) => {
+  const goTo = (nextStep: LoginStep) => {
+    resetStatus();
+    setStep(nextStep);
+  };
+
+  const finishLogin = (role?: string | null) => {
+    router.push(getDashboardRoute(role));
+  };
+
+  const handlePasswordLogin = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setLoading(true);
     setError('');
 
     try {
-      const fullPhone = phone.startsWith('+91') ? phone : `+91${phone}`;
-      await requestLoginOtp(fullPhone);
-      setOtpSent(true);
-    } catch (err: any) {
-      setError(err.message);
+      const data = await loginWithPassword(email, password);
+      finishLogin(data.profile.role);
+    } catch (err) {
+      setError(getMessage(err));
     } finally {
       setLoading(false);
     }
   };
 
-  const handleVerifyOTP = async (event: React.FormEvent) => {
+  const handleRequestEmailOtp = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setLoading(true);
     setError('');
 
     try {
-      const fullPhone = phone.startsWith('+91') ? phone : `+91${phone}`;
-      const data = await verifyLoginOtp(fullPhone, otp);
-      
-      if (data.profile) {
-        router.push(getDashboardRoute(data.profile.role));
-      }
-    } catch (err: any) {
-      setError(err.message);
+      const data = await requestEmailLoginOtp(email);
+      setDebugOtp(data.debug_otp_code ?? '');
+      setOtpSent(true);
+    } catch (err) {
+      setError(getMessage(err));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleVerifyEmailOtp = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setLoading(true);
+    setError('');
+
+    try {
+      const data = await verifyEmailLoginOtp(email, otp);
+      finishLogin(data.profile.role);
+    } catch (err) {
+      setError(getMessage(err));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRequestPhoneOtp = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setLoading(true);
+    setError('');
+
+    try {
+      const data = await requestPhoneLoginOtp(phone);
+      setDebugOtp(data.debug_otp_code ?? '');
+      setOtpSent(true);
+    } catch (err) {
+      setError(getMessage(err));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleVerifyPhoneOtp = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setLoading(true);
+    setError('');
+
+    try {
+      const data = await verifyPhoneLoginOtp(phone, otp);
+      finishLogin(data.profile.role);
+    } catch (err) {
+      setError(getMessage(err));
     } finally {
       setLoading(false);
     }
@@ -98,104 +142,112 @@ export default function LoginPage() {
             </div>
           </Link>
           <h1 className="text-2xl font-bold text-gray-900">Login to Bihar Rozgar</h1>
-          <p className="text-gray-600 mt-2">Use Google or your phone number to continue</p>
+          <p className="text-gray-600 mt-2">Choose email or phone to access your account</p>
         </div>
 
         <div className="bg-white rounded-xl border border-gray-200 p-6">
-          {!otpSent ? (
-            <>
-              <Button
-                type="button"
-                variant="outline"
-                className="w-full border-gray-300 text-gray-700 hover:border-gray-300 hover:bg-gray-50 hover:text-gray-900"
-                onClick={handleGoogleLogin}
-                loading={loading}
-              >
-                <GoogleIcon />
-                <span className="ml-2">Continue with Google</span>
-              </Button>
+          {step === 'method' && (
+            <div className="space-y-4">
+              <AuthChoice
+                icon={<Mail className="w-6 h-6" />}
+                title="Login with Gmail (Email)"
+                description="Use an email OTP or your password"
+                onClick={() => goTo('email-method')}
+              />
+              <AuthChoice
+                icon={<Phone className="w-6 h-6" />}
+                title="Login with Phone Number"
+                description="Receive a secure OTP on your phone"
+                onClick={() => goTo('phone-otp')}
+              />
+            </div>
+          )}
 
-              <div className="relative my-5">
-                <div className="absolute inset-0 flex items-center">
-                  <div className="w-full border-t border-gray-200" />
-                </div>
-                <div className="relative flex justify-center text-xs uppercase">
-                  <span className="bg-white px-3 text-gray-500">Or continue with phone</span>
-                </div>
-              </div>
+          {step === 'email-method' && (
+            <div className="space-y-4">
+              <BackButton onClick={() => goTo('method')} />
+              <h2 className="text-lg font-semibold text-gray-900">Choose email login method</h2>
+              <AuthChoice
+                icon={<Mail className="w-6 h-6" />}
+                title="Login with OTP"
+                description="Send a one-time password to your email"
+                onClick={() => goTo('email-otp')}
+              />
+              <AuthChoice
+                icon={<KeyRound className="w-6 h-6" />}
+                title="Login with Password"
+                description="Use your email and account password"
+                onClick={() => goTo('email-password')}
+              />
+            </div>
+          )}
 
-              <form onSubmit={handleSendOTP}>
-                <div className="mb-4">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Phone Number
-                  </label>
-                  <div className="relative">
-                    <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                    <Input
-                      type="tel"
-                      placeholder="+91 9876543210"
-                      value={phone}
-                      onChange={(event) => setPhone(event.target.value)}
-                      className="pl-10"
-                      required
-                    />
-                  </div>
-                  <p className="text-sm text-gray-500 mt-1">
-                    We&apos;ll send a verification code to your phone
-                  </p>
-                </div>
-
-                {error && (
-                  <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm">
-                    {error}
-                  </div>
-                )}
-
-                <Button type="submit" className="w-full" loading={loading}>
-                  Send OTP <ArrowRight className="w-4 h-4 ml-2" />
-                </Button>
-              </form>
-            </>
-          ) : (
-            <form onSubmit={handleVerifyOTP}>
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Enter OTP
-                </label>
-                <Input
-                  type="text"
-                  placeholder="Enter 6-digit OTP"
-                  value={otp}
-                  onChange={(event) => setOtp(event.target.value)}
-                  className="text-center text-2xl tracking-widest"
-                  maxLength={6}
-                  required
-                />
-                <p className="text-sm text-gray-500 mt-1">Code sent to {phone}</p>
-              </div>
-
-              {error && (
-                <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm">
-                  {error}
-                </div>
-              )}
-
+          {step === 'email-password' && (
+            <form onSubmit={handlePasswordLogin} className="space-y-4">
+              <BackButton onClick={() => goTo('email-method')} />
+              <Input
+                label="Email Address"
+                type="email"
+                autoComplete="email"
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+                placeholder="you@example.com"
+                required
+              />
+              <Input
+                label="Password"
+                type="password"
+                autoComplete="current-password"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                placeholder="Enter your password"
+                required
+              />
+              <ErrorMessage message={error} />
               <Button type="submit" className="w-full" loading={loading}>
-                Verify and Login
+                Login with Password <ArrowRight className="w-4 h-4 ml-2" />
               </Button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  setOtpSent(false);
-                  setOtp('');
-                  setError('');
-                }}
-                className="w-full mt-3 text-sm text-gray-500 hover:text-gray-700"
-              >
-                Change phone number
-              </button>
             </form>
+          )}
+
+          {step === 'email-otp' && (
+            <OtpLoginForm
+              label="Email Address"
+              type="email"
+              value={email}
+              otp={otp}
+              otpSent={otpSent}
+              debugOtp={debugOtp}
+              error={error}
+              loading={loading}
+              placeholder="you@example.com"
+              onValueChange={setEmail}
+              onOtpChange={setOtp}
+              onRequest={handleRequestEmailOtp}
+              onVerify={handleVerifyEmailOtp}
+              onBack={() => goTo('email-method')}
+              onChangeRecipient={resetStatus}
+            />
+          )}
+
+          {step === 'phone-otp' && (
+            <OtpLoginForm
+              label="Phone Number"
+              type="tel"
+              value={phone}
+              otp={otp}
+              otpSent={otpSent}
+              debugOtp={debugOtp}
+              error={error}
+              loading={loading}
+              placeholder="+91 9876543210"
+              onValueChange={setPhone}
+              onOtpChange={setOtp}
+              onRequest={handleRequestPhoneOtp}
+              onVerify={handleVerifyPhoneOtp}
+              onBack={() => goTo('method')}
+              onChangeRecipient={resetStatus}
+            />
           )}
         </div>
 
@@ -207,5 +259,140 @@ export default function LoginPage() {
         </p>
       </div>
     </div>
+  );
+}
+
+function AuthChoice({
+  icon,
+  title,
+  description,
+  onClick,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  description: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="w-full p-4 border-2 border-gray-200 rounded-xl flex items-center gap-4 text-left transition-all hover:border-bihar-green hover:bg-bihar-green-bg"
+    >
+      <span className="w-12 h-12 bg-bihar-green-bg rounded-full flex items-center justify-center text-bihar-green">
+        {icon}
+      </span>
+      <span className="flex-1">
+        <span className="block font-semibold text-gray-900">{title}</span>
+        <span className="block text-sm text-gray-500 mt-0.5">{description}</span>
+      </span>
+      <ArrowRight className="w-5 h-5 text-gray-400" />
+    </button>
+  );
+}
+
+function BackButton({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="inline-flex items-center gap-1 text-sm font-medium text-gray-500 hover:text-bihar-green"
+    >
+      <ArrowLeft className="w-4 h-4" /> Back
+    </button>
+  );
+}
+
+function ErrorMessage({ message }: { message: string }) {
+  if (!message) return null;
+
+  return (
+    <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm">
+      {message}
+    </div>
+  );
+}
+
+function OtpLoginForm({
+  label,
+  type,
+  value,
+  otp,
+  otpSent,
+  debugOtp,
+  error,
+  loading,
+  placeholder,
+  onValueChange,
+  onOtpChange,
+  onRequest,
+  onVerify,
+  onBack,
+  onChangeRecipient,
+}: {
+  label: string;
+  type: 'email' | 'tel';
+  value: string;
+  otp: string;
+  otpSent: boolean;
+  debugOtp: string;
+  error: string;
+  loading: boolean;
+  placeholder: string;
+  onValueChange: (value: string) => void;
+  onOtpChange: (value: string) => void;
+  onRequest: (event: FormEvent<HTMLFormElement>) => void;
+  onVerify: (event: FormEvent<HTMLFormElement>) => void;
+  onBack: () => void;
+  onChangeRecipient: () => void;
+}) {
+  if (!otpSent) {
+    return (
+      <form onSubmit={onRequest} className="space-y-4">
+        <BackButton onClick={onBack} />
+        <Input
+          label={label}
+          type={type}
+          autoComplete={type === 'email' ? 'email' : 'tel'}
+          value={value}
+          onChange={(event) => onValueChange(event.target.value)}
+          placeholder={placeholder}
+          required
+        />
+        <p className="text-sm text-gray-500">We will send a 6-digit one-time password.</p>
+        <ErrorMessage message={error} />
+        <Button type="submit" className="w-full" loading={loading}>
+          Send OTP
+        </Button>
+      </form>
+    );
+  }
+
+  return (
+    <form onSubmit={onVerify} className="space-y-4">
+      <BackButton onClick={onChangeRecipient} />
+      <Input
+        label="Enter OTP"
+        type="text"
+        inputMode="numeric"
+        autoComplete="one-time-code"
+        value={otp}
+        onChange={(event) => onOtpChange(event.target.value.replace(/\D/g, ''))}
+        placeholder="Enter 6-digit OTP"
+        className="text-center text-2xl tracking-widest"
+        maxLength={6}
+        required
+      />
+      <p className="text-sm text-gray-500">Code sent to {value}</p>
+      {debugOtp && (
+        <p className="rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-sm text-amber-800">
+          Development OTP: <strong>{debugOtp}</strong>
+        </p>
+      )}
+      <ErrorMessage message={error} />
+      <Button type="submit" className="w-full" loading={loading}>
+        Verify and Login
+      </Button>
+    </form>
   );
 }

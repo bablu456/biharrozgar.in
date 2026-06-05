@@ -16,7 +16,13 @@ from app.models.enums import UserRole
 from app.models.profile import Profile
 from app.models.user import User
 from app.schemas.auth import (
+    AuthResponse,
     AuthenticatedSession,
+    EmailOTPRequest,
+    EmailOTPVerifyPayload,
+    LoginVerifyRequest,
+    OTPChallengeResponse,
+    OTPRequest,
     RefreshTokenRequest,
     TokenPair,
     UserLoginRequest,
@@ -66,13 +72,13 @@ def _build_token_pair(user: User) -> TokenPair:
 
 @router.post(
     "/register",
-    response_model=TokenPair,
+    response_model=AuthResponse,
     status_code=status.HTTP_201_CREATED,
 )
 async def register_user(
     payload: UserRegisterRequest,
     session: DatabaseSession,
-) -> TokenPair:
+) -> AuthResponse:
     existing_email_user = await user_crud.get_user_by_email_or_phone(session, payload.email)
     if existing_email_user is not None:
         raise HTTPException(
@@ -97,7 +103,13 @@ async def register_user(
 
     try:
         await session.flush()
-        profile = Profile(id=user.id, phone=payload.phone_number)
+        profile = Profile(
+            id=user.id,
+            phone=payload.phone_number,
+            full_name=payload.full_name,
+            role=payload.role,
+            district=payload.district,
+        )
         user.profile = profile
         await session.commit()
     except IntegrityError:
@@ -107,14 +119,26 @@ async def register_user(
             detail="An account with this email or phone number already exists.",
         ) from None
 
-    return _build_token_pair(user)
+    fresh_user = await user_crud.get_by_id(session, user.id)
+    if fresh_user is None:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="The account was created but could not be reloaded.",
+        )
+
+    auth_session = auth_service.build_authenticated_session(fresh_user)
+    return AuthResponse(
+        user=auth_session.user,
+        profile=auth_session.profile,
+        tokens=_build_token_pair(fresh_user),
+    )
 
 
-@router.post("/login", response_model=TokenPair)
+@router.post("/login", response_model=AuthResponse)
 async def login_user(
     payload: UserLoginRequest,
     session: DatabaseSession,
-) -> TokenPair:
+) -> AuthResponse:
     user = await user_crud.get_user_by_email_or_phone(session, payload.identifier)
     if user is None:
         raise HTTPException(
@@ -135,7 +159,68 @@ async def login_user(
 
     user.last_login_at = utc_now()
     await session.commit()
-    return _build_token_pair(user)
+
+    fresh_user = await user_crud.get_by_id(session, user.id)
+    if fresh_user is None:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="The account exists but could not be reloaded.",
+        )
+
+    auth_session = auth_service.build_authenticated_session(fresh_user)
+    return AuthResponse(
+        user=auth_session.user,
+        profile=auth_session.profile,
+        tokens=_build_token_pair(fresh_user),
+    )
+
+
+@router.post("/login/request-otp", include_in_schema=False)
+@router.post("/login/phone/request-otp", response_model=OTPChallengeResponse)
+async def request_phone_login_otp(
+    payload: OTPRequest,
+    session: DatabaseSession,
+) -> OTPChallengeResponse:
+    return await auth_service.request_login_otp(
+        session,
+        phone_number=payload.phone,
+    )
+
+
+@router.post("/login/verify-otp", include_in_schema=False)
+@router.post("/login/phone/verify-otp", response_model=AuthResponse)
+async def verify_phone_login_otp(
+    payload: LoginVerifyRequest,
+    session: DatabaseSession,
+) -> AuthResponse:
+    return await auth_service.verify_login(
+        session,
+        phone_number=payload.phone,
+        otp_code=payload.otp_code,
+    )
+
+
+@router.post("/login/email/request-otp", response_model=OTPChallengeResponse)
+async def request_email_login_otp(
+    payload: EmailOTPRequest,
+    session: DatabaseSession,
+) -> OTPChallengeResponse:
+    return await auth_service.request_email_login_otp(
+        session,
+        email=payload.email,
+    )
+
+
+@router.post("/login/email/verify-otp", response_model=AuthResponse)
+async def verify_email_login_otp(
+    payload: EmailOTPVerifyPayload,
+    session: DatabaseSession,
+) -> AuthResponse:
+    return await auth_service.verify_email_login(
+        session,
+        email=payload.email,
+        otp_code=payload.otp_code,
+    )
 
 
 @router.post("/refresh", response_model=TokenPair)

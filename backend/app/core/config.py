@@ -2,14 +2,18 @@ from __future__ import annotations
 
 import json
 from functools import lru_cache
+from pathlib import Path
 
 from pydantic import AliasChoices, Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
+BACKEND_DIR = Path(__file__).resolve().parents[2]
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=BACKEND_DIR / ".env",
         env_file_encoding="utf-8",
         extra="ignore",
         case_sensitive=False,
@@ -27,9 +31,9 @@ class Settings(BaseSettings):
     )
     cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:3000"])
 
-    jwt_secret_key: SecretStr = SecretStr("change-me-access-secret")
-    jwt_refresh_secret_key: SecretStr = SecretStr("change-me-refresh-secret")
-    otp_secret_key: SecretStr = SecretStr("change-me-otp-secret")
+    jwt_secret_key: SecretStr = SecretStr("change-me-access-secret-at-least-32-characters")
+    jwt_refresh_secret_key: SecretStr = SecretStr("change-me-refresh-secret-at-least-32-characters")
+    otp_secret_key: SecretStr = SecretStr("change-me-otp-secret-at-least-32-characters")
     openrouter_api_key: SecretStr = SecretStr("")
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
     openrouter_http_referer: str = "https://biharrozgar.in"
@@ -41,6 +45,12 @@ class Settings(BaseSettings):
     openrouter_embedding_fallback_models: list[str] = Field(default_factory=lambda: ["text-embedding-3-small"])
     openrouter_embedding_dimensions: int = 1536
     openrouter_embedding_batch_size: int = 32
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_username: str = ""
+    smtp_password: SecretStr = SecretStr("")
+    smtp_from_email: str = ""
+    smtp_use_tls: bool = True
     jwt_algorithm: str = "HS256"
 
     access_token_expire_minutes: int = 30

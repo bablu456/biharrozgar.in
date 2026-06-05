@@ -19,7 +19,8 @@ class AuthOTP(TimestampMixin, Base):
         primary_key=True,
         default=uuid.uuid4,
     )
-    phone: Mapped[str] = mapped_column(String(20), index=True, nullable=False)
+    # Stores either an E.164 phone number or a normalized email address.
+    phone: Mapped[str] = mapped_column(String(255), index=True, nullable=False)
     purpose: Mapped[OtpPurpose] = mapped_column(
         SqlEnum(OtpPurpose, name="otp_purpose", native_enum=False, validate_strings=True),
         index=True,

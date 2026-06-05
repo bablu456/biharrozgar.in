@@ -31,15 +31,17 @@ The code is organized using a clean architecture pattern inside the `backend/app
 
 ## 3. 🔐 Authentication Flow (No More Supabase Auth)
 
-Because we dropped Supabase Auth, we built our own secure Identity system:
+Because we dropped Supabase Auth, authentication is handled by the FastAPI API:
 
-1. **Request OTP (`/auth/login/request-otp`)**: The user submits their phone number. A 6-digit OTP is generated and saved temporarily in the database.
-2. **Verify OTP (`/auth/login/verify-otp`)**: The user submits the OTP. If correct, the backend issues two JSON Web Tokens (JWTs):
-   - **`access_token`**: Used to prove identity on every API request. Expires quickly.
-   - **`refresh_token`**: Used silently by the frontend to get a new access token when the old one expires.
-3. **Frontend Integration**: The Next.js frontend saves these tokens in `localStorage` and automatically sends the `access_token` in the headers (`Authorization: Bearer <token>`) for every request.
+1. **Detailed registration (`/auth/register`)**: Creates an account with full name, email, phone number, password, role, and district.
+2. **Password login (`/auth/login`)**: Accepts an email address or phone number plus password.
+3. **Email OTP login (`/auth/login/email/request-otp`)**: Sends a 6-digit OTP through SMTP, then verifies it with `/auth/login/email/verify-otp`.
+4. **Phone OTP login (`/auth/login/phone/request-otp`)**: Creates a 6-digit phone OTP, then verifies it with `/auth/login/phone/verify-otp`.
+5. **Frontend Integration**: The Next.js frontend saves the issued access and refresh tokens in `localStorage`.
 
-> **Note on Google Login:** Currently disabled because the custom OAuth logic hasn't been built on this new FastAPI backend yet.
+In development, OTP codes are returned in the challenge response so local testing works without email or SMS credentials. Production email OTP requires the `SMTP_*` environment variables, and production phone OTP requires an SMS provider implementation in `app/services/otp_delivery.py`.
+
+Direct social login is intentionally not part of the authentication system.
 
 ---
 
@@ -94,4 +96,3 @@ The heavy lifting of the migration is done. Both the Job Engine and User Dashboa
 
 1. **Application UI**: Currently, the frontend "Apply" buttons point to WhatsApp or external links. You need to build a React modal where seekers can type a cover letter and click "Apply" to hit the `/api/v1/applications/` endpoint internally.
 2. **Real SMS Provider**: Open `backend/app/services/otp_delivery.py`. You'll see a placeholder function that just prints the OTP to the terminal. You need to integrate a real SMS provider (like Fast2SMS or Twilio) here to send real text messages to users in production.
-3. **Google OAuth (Optional)**: If you want Google Login back, we will need to build dedicated OAuth endpoints in FastAPI to handle Google's redirect flow.

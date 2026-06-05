@@ -4,32 +4,17 @@ import { FormEvent, useEffect, useRef, useState } from "react";
 import { MessageCircle, X, Send } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
+import {
+  DEFAULT_OPENROUTER_CHAT_MODEL_ID,
+  OPENROUTER_CHAT_MODELS,
+} from "@/constants/openrouterModels";
+
 type ChatRole = "user" | "assistant";
 
 type ChatMessage = {
   role: ChatRole;
   content: string;
 };
-
-type OpenRouterModel = {
-  id: string;
-  label: string;
-};
-
-const FREE_OPENROUTER_MODELS: OpenRouterModel[] = [
-  {
-    id: "nvidia/nemotron-3-super-120b-a12b:free",
-    label: "Nemotron 3 Super Free",
-  },
-  {
-    id: "deepseek/deepseek-v4-flash:free",
-    label: "DeepSeek V4 Flash Free",
-  },
-  {
-    id: "meta-llama/llama-3.3-70b-instruct:free",
-    label: "Llama 3.3 70B Free",
-  },
-];
 
 const INITIAL_MESSAGES: ChatMessage[] = [
   {
@@ -43,12 +28,16 @@ export default function AiChatbot() {
   const [messages, setMessages] = useState<ChatMessage[]>(INITIAL_MESSAGES);
   const [input, setInput] = useState("");
   const [selectedModel, setSelectedModel] = useState(
-    FREE_OPENROUTER_MODELS[0].id
+    DEFAULT_OPENROUTER_CHAT_MODEL_ID
   );
   const [isOpen, setIsOpen] = useState(true);
   const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const chatEndRef = useRef<HTMLDivElement | null>(null);
+  const selectedModelInfo =
+    OPENROUTER_CHAT_MODELS.find(
+      (model) => model.id === selectedModel
+    ) ?? OPENROUTER_CHAT_MODELS[0];
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -89,7 +78,7 @@ export default function AiChatbot() {
         const errorData = await response
           .json()
           .catch(() => ({ detail: "Chat request failed." }));
-        throw new Error(errorData.detail || "Chat request failed.");
+        throw new Error(normalizeChatErrorDetail(errorData.detail));
       }
 
       const data = (await response.json()) as { reply: string };
@@ -103,7 +92,7 @@ export default function AiChatbot() {
     } catch (err) {
       const message =
         err instanceof Error
-          ? err.message
+          ? formatChatError(err.message)
           : "Kuch error aa gaya. Thodi der baad try kijiye.";
       setError(message);
     } finally {
@@ -135,19 +124,29 @@ export default function AiChatbot() {
             AI job assistant
           </p>
         </div>
-        <div className="flex min-w-0 items-center gap-2">
-          <select
-            value={selectedModel}
-            onChange={(event) => setSelectedModel(event.target.value)}
-            className="max-w-[150px] truncate bg-emerald-50/50 text-emerald-800 text-xs py-1.5 px-3 rounded-full border border-emerald-500/10 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 cursor-pointer transition-all hover:bg-emerald-50"
-            aria-label="Select AI model"
-          >
-            {FREE_OPENROUTER_MODELS.map((model) => (
-              <option key={model.id} value={model.id} className="text-slate-800 bg-white">
-                {model.label}
-              </option>
-            ))}
-          </select>
+        <div className="flex min-w-0 items-start gap-2">
+          <div className="flex max-w-[160px] flex-col items-end sm:max-w-[180px]">
+            <select
+              value={selectedModel}
+              onChange={(event) => setSelectedModel(event.target.value)}
+              className="w-full truncate bg-emerald-50/50 text-emerald-800 text-xs py-1.5 px-3 rounded-full border border-emerald-500/10 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 cursor-pointer transition-all hover:bg-emerald-50"
+              aria-label="Select AI model"
+              title={selectedModelInfo.description}
+            >
+              {OPENROUTER_CHAT_MODELS.map((model) => (
+                <option
+                  key={model.id}
+                  value={model.id}
+                  className="text-slate-800 bg-white"
+                >
+                  {model.label}
+                </option>
+              ))}
+            </select>
+            <p className="mt-1 max-w-[160px] text-right text-[10px] leading-tight text-emerald-700/70 sm:max-w-[180px]">
+              {selectedModelInfo.hint}
+            </p>
+          </div>
           <button
             type="button"
             onClick={() => setIsOpen(false)}
@@ -275,4 +274,44 @@ export default function AiChatbot() {
       </form>
     </section>
   );
+}
+
+function formatChatError(message: string): string {
+  if (message.includes("OPENROUTER_API_KEY is not configured")) {
+    return "OpenRouter key missing hai. backend/.env me OPENROUTER_API_KEY add karke backend restart kijiye.";
+  }
+
+  if (message.includes("Unsupported OpenRouter chat model")) {
+    return "Selected model free list me nahi hai. Dropdown se koi available free model choose kijiye.";
+  }
+
+  if (message.includes("AI models are unavailable")) {
+    return "Abhi selected AI model unavailable hai. Koi aur free model try kijiye.";
+  }
+
+  return message;
+}
+
+function normalizeChatErrorDetail(detail: unknown): string {
+  if (typeof detail === "string" && detail.trim()) {
+    return detail;
+  }
+
+  if (Array.isArray(detail)) {
+    const messages = detail
+      .map((item) => {
+        if (item && typeof item === "object" && "msg" in item) {
+          const maybeMessage = (item as { msg?: unknown }).msg;
+          return typeof maybeMessage === "string" ? maybeMessage : "";
+        }
+        return "";
+      })
+      .filter((item) => item.trim().length > 0);
+
+    if (messages.length > 0) {
+      return messages.join(" ");
+    }
+  }
+
+  return "Chat request failed.";
 }

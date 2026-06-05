@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
+from app.core.openrouter_models import CHAT_FALLBACK_MODEL_IDS
 from app.schemas.chat import ChatMessage
 from app.services.ai_gateway import AIProviderUnavailableError, OpenRouterGateway
 
@@ -23,11 +24,6 @@ Core rules:
 Your tone must be highly professional, polite, and direct. Avoid excessive emojis. At the very end of EVERY response, you MUST provide 2 to 3 actionable, short follow-up options for the user. You must wrap each option EXACTLY in square brackets like this: [Search Jobs] [Post a Job] [Update Profile]. Do not add any text after these brackets.
 """
 
-FALLBACK_MODEL_IDS = (
-    "nvidia/nemotron-3-super-120b-a12b:free",
-)
-
-
 class OpenRouterAIService:
     def __init__(self) -> None:
         self.gateway = OpenRouterGateway()
@@ -47,6 +43,6 @@ class OpenRouterAIService:
 
         return await self.gateway.complete_text(
             messages=payload_messages,
-            model_ids=(model_id, *FALLBACK_MODEL_IDS),
+            model_ids=(model_id, *CHAT_FALLBACK_MODEL_IDS),
             temperature=0.3,
         )

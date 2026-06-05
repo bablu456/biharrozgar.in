@@ -1,126 +1,72 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { FormEvent, useState } from 'react';
 import Link from 'next/link';
-import { useRouter, useSearchParams } from 'next/navigation';
-import { Briefcase, Phone, User } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { ArrowLeft, ArrowRight, Mail, Phone } from 'lucide-react';
 
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
-import {
-  buildAuthCallbackUrl,
-  getDashboardRoute,
-  getRegistrationNameForRole,
-} from '@/lib/auth';
-import { requestRegisterOtp, verifyRegisterOtp } from '@/lib/api-auth';
+import { BIHAR_DISTRICTS } from '@/constants/districts';
+import { getDashboardRoute } from '@/lib/auth';
+import { registerUser } from '@/lib/api-auth';
 
+type RegistrationMethod = 'email' | 'phone';
 type AccountRole = 'seeker' | 'employer';
 
-function GoogleIcon() {
-  return (
-    <svg aria-hidden="true" className="w-5 h-5" viewBox="0 0 24 24">
-      <path
-        fill="#EA4335"
-        d="M12 10.2v3.9h5.5c-.2 1.3-1.6 3.9-5.5 3.9-3.3 0-6.1-2.8-6.1-6.2s2.8-6.2 6.1-6.2c1.9 0 3.2.8 3.9 1.5l2.7-2.6C16.8 2.8 14.6 2 12 2 6.9 2 2.8 6.3 2.8 11.8S6.9 21.6 12 21.6c6.9 0 9.1-4.9 9.1-7.4 0-.5-.1-.9-.1-1.3H12Z"
-      />
-      <path
-        fill="#34A853"
-        d="M2.8 7.4 6 9.8c.9-2 3-4.2 6-4.2 1.9 0 3.2.8 3.9 1.5l2.7-2.6C16.8 2.8 14.6 2 12 2 8 2 4.6 4.2 2.8 7.4Z"
-      />
-      <path
-        fill="#FBBC05"
-        d="M12 21.6c2.5 0 4.7-.8 6.3-2.3l-3.1-2.5c-.8.6-1.9 1.2-3.2 1.2-3.9 0-5.3-2.6-5.5-3.9l-3.1 2.4c1.8 3.4 5.2 5.7 8.6 5.7Z"
-      />
-      <path
-        fill="#4285F4"
-        d="M21.1 14.2c.1-.4.1-.8.1-1.3 0-.4 0-.8-.1-1.2H12v3.9h5.5c-.3 1.3-1.2 2.5-2.3 3.3l3.1 2.5c1.8-1.7 2.8-4.2 2.8-7.2Z"
-      />
-    </svg>
-  );
+const districtOptions = BIHAR_DISTRICTS.map((district) => ({
+  value: district.slug,
+  label: district.name.trim(),
+}));
+
+function getMessage(error: unknown): string {
+  return error instanceof Error
+    ? error.message
+    : 'Unable to create your account. Please try again.';
 }
 
 export default function RegisterPage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const [step, setStep] = useState<'role' | 'phone' | 'otp' | 'profile'>('role');
-  const [role, setRole] = useState<AccountRole>('seeker');
-  const [phone, setPhone] = useState('');
-  const [otp, setOtp] = useState('');
+  const [method, setMethod] = useState<RegistrationMethod | null>(null);
   const [formData, setFormData] = useState({
-    full_name: '',
-    company_name: '',
+    fullName: '',
+    email: '',
+    phone: '',
+    role: 'seeker' as AccountRole,
     district: '',
+    password: '',
+    confirmPassword: '',
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  useEffect(() => {
-    if (searchParams.get('error') === 'google-login-failed') {
-      setError('Google signup could not be completed. Please try again.');
-    }
-  }, [searchParams]);
-
-  const handleGoogleRegister = async () => {
-    setError('Google signup is temporarily disabled. Please use phone OTP.');
+  const updateField = (field: keyof typeof formData, value: string) => {
+    setFormData((current) => ({ ...current, [field]: value }));
   };
 
-  const handleSendOTP = async (event: React.FormEvent) => {
+  const handleRegister = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    setLoading(true);
     setError('');
 
-    try {
-      const fullPhone = phone.startsWith('+91') ? phone : `+91${phone}`;
-      await requestRegisterOtp(fullPhone);
-      setStep('otp');
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleVerifyOTP = async (event: React.FormEvent) => {
-    event.preventDefault();
-    setStep('profile');
-  };
-
-  const handleProfileComplete = async () => {
-    const trimmedName = getRegistrationNameForRole(role, formData);
-
-    if (!trimmedName) {
-      setError(
-        role === 'employer'
-          ? 'Please enter your company name.'
-          : 'Please enter your full name.'
-      );
-      return;
-    }
-
-    if (!formData.district) {
-      setError('Please select your district.');
+    if (formData.password !== formData.confirmPassword) {
+      setError('Password and confirm password must match.');
       return;
     }
 
     setLoading(true);
-    setError('');
-
     try {
-      const fullPhone = phone.startsWith('+91') ? phone : `+91${phone}`;
-      const data = await verifyRegisterOtp({
-        phone: fullPhone,
-        otp_code: otp,
-        full_name: trimmedName,
-        role: role as any,
+      const data = await registerUser({
+        full_name: formData.fullName,
+        email: formData.email,
+        phone_number: formData.phone,
+        password: formData.password,
+        role: formData.role,
         district: formData.district,
       });
-
-      if (data.profile) {
-        router.push(getDashboardRoute(role));
-      }
-    } catch (err: any) {
-      setError(err.message);
+      router.push(getDashboardRoute(data.profile.role));
+    } catch (err) {
+      setError(getMessage(err));
     } finally {
       setLoading(false);
     }
@@ -128,215 +74,121 @@ export default function RegisterPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center py-12 px-4">
-      <div className="max-w-md w-full">
+      <div className="max-w-lg w-full">
         <div className="text-center mb-8">
           <Link href="/" className="inline-flex items-center gap-2 mb-4">
             <div className="w-12 h-12 bg-bihar-green rounded-lg flex items-center justify-center">
               <span className="text-white font-bold text-2xl">BR</span>
             </div>
           </Link>
-          <h1 className="text-2xl font-bold text-gray-900">Create Account</h1>
-          <p className="text-gray-600 mt-2">Join Bihar Rozgar Portal</p>
+          <h1 className="text-2xl font-bold text-gray-900">Create your Bihar Rozgar account</h1>
+          <p className="text-gray-600 mt-2">
+            Register with verified contact details and a complete profile
+          </p>
         </div>
 
         <div className="bg-white rounded-xl border border-gray-200 p-6">
-          {step === 'role' && (
+          {!method ? (
             <div className="space-y-4">
-              <p className="text-sm text-gray-600 mb-4">I want to:</p>
-              <button
-                onClick={() => {
-                  setRole('seeker');
-                  setStep('phone');
-                  setError('');
-                }}
-                className={`w-full p-4 border-2 rounded-xl flex items-center gap-4 transition-all ${
-                  role === 'seeker'
-                    ? 'border-bihar-green bg-bihar-green-bg'
-                    : 'border-gray-200 hover:border-gray-300'
-                }`}
-              >
-                <div className="w-12 h-12 bg-bihar-green-bg rounded-full flex items-center justify-center">
-                  <User className="w-6 h-6 text-bihar-green" />
-                </div>
-                <div className="text-left">
-                  <div className="font-semibold text-gray-900">Find Jobs</div>
-                  <div className="text-sm text-gray-500">Search and apply for jobs</div>
-                </div>
-              </button>
-
-              <button
-                onClick={() => {
-                  setRole('employer');
-                  setStep('phone');
-                  setError('');
-                }}
-                className={`w-full p-4 border-2 rounded-xl flex items-center gap-4 transition-all ${
-                  role === 'employer'
-                    ? 'border-bihar-green bg-bihar-green-bg'
-                    : 'border-gray-200 hover:border-gray-300'
-                }`}
-              >
-                <div className="w-12 h-12 bg-bihar-green-bg rounded-full flex items-center justify-center">
-                  <Briefcase className="w-6 h-6 text-bihar-green" />
-                </div>
-                <div className="text-left">
-                  <div className="font-semibold text-gray-900">Post Jobs</div>
-                  <div className="text-sm text-gray-500">Hire candidates for my company</div>
-                </div>
-              </button>
-
-              <div className="relative my-5">
-                <div className="absolute inset-0 flex items-center">
-                  <div className="w-full border-t border-gray-200" />
-                </div>
-                <div className="relative flex justify-center text-xs uppercase">
-                  <span className="bg-white px-3 text-gray-500">Or use Google</span>
-                </div>
-              </div>
-
-              <Button
-                type="button"
-                variant="outline"
-                className="w-full border-gray-300 text-gray-700 hover:border-gray-300 hover:bg-gray-50 hover:text-gray-900"
-                onClick={handleGoogleRegister}
-                loading={loading}
-              >
-                <GoogleIcon />
-                <span className="ml-2">Continue with Google</span>
-              </Button>
-
-              {error && (
-                <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm">
-                  {error}
-                </div>
-              )}
+              <RegistrationChoice
+                icon={<Mail className="w-6 h-6" />}
+                title="Register with Gmail (Email)"
+                description="Open the detailed registration form with email first"
+                onClick={() => setMethod('email')}
+              />
+              <RegistrationChoice
+                icon={<Phone className="w-6 h-6" />}
+                title="Register with Phone Number"
+                description="Open the detailed registration form with phone first"
+                onClick={() => setMethod('phone')}
+              />
+              <p className="text-xs text-center text-gray-500 pt-2">
+                Both options require your complete details. There is no one-click signup.
+              </p>
             </div>
-          )}
-
-          {step === 'phone' && (
-            <form onSubmit={handleSendOTP}>
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Phone Number
-                </label>
-                <div className="relative">
-                  <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                  <Input
-                    type="tel"
-                    placeholder="+91 9876543210"
-                    value={phone}
-                    onChange={(event) => setPhone(event.target.value)}
-                    className="pl-10"
-                    required
-                  />
-                </div>
-              </div>
-
-              {error && (
-                <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm">
-                  {error}
-                </div>
-              )}
-
-              <Button type="submit" className="w-full" loading={loading}>
-                Send OTP
-              </Button>
-
+          ) : (
+            <form onSubmit={handleRegister} className="space-y-4">
               <button
                 type="button"
                 onClick={() => {
-                  setStep('role');
+                  setMethod(null);
                   setError('');
                 }}
-                className="w-full mt-3 text-sm text-gray-500 hover:text-gray-700"
+                className="inline-flex items-center gap-1 text-sm font-medium text-gray-500 hover:text-bihar-green"
               >
-                Back
+                <ArrowLeft className="w-4 h-4" /> Back
               </button>
-            </form>
-          )}
 
-          {step === 'otp' && (
-            <form onSubmit={handleVerifyOTP}>
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Enter OTP
-                </label>
-                <Input
-                  type="text"
-                  placeholder="Enter 6-digit OTP"
-                  value={otp}
-                  onChange={(event) => setOtp(event.target.value)}
-                  className="text-center text-2xl tracking-widest"
-                  maxLength={6}
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900">Detailed Registration Form</h2>
+                <p className="text-sm text-gray-500 mt-1">
+                  {method === 'email'
+                    ? 'Email registration selected. Complete all fields below.'
+                    : 'Phone registration selected. Complete all fields below.'}
+                </p>
+              </div>
+
+              <Input
+                label="Full Name"
+                autoComplete="name"
+                value={formData.fullName}
+                onChange={(event) => updateField('fullName', event.target.value)}
+                placeholder="Enter your full name"
+                required
+              />
+
+              {method === 'email' ? (
+                <>
+                  <EmailField value={formData.email} onChange={(value) => updateField('email', value)} />
+                  <PhoneField value={formData.phone} onChange={(value) => updateField('phone', value)} />
+                </>
+              ) : (
+                <>
+                  <PhoneField value={formData.phone} onChange={(value) => updateField('phone', value)} />
+                  <EmailField value={formData.email} onChange={(value) => updateField('email', value)} />
+                </>
+              )}
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <Select
+                  label="Account Type"
+                  value={formData.role}
+                  onChange={(event) => updateField('role', event.target.value)}
+                  options={[
+                    { value: 'seeker', label: 'Job Seeker' },
+                    { value: 'employer', label: 'Employer' },
+                  ]}
+                />
+                <Select
+                  label="District"
+                  value={formData.district}
+                  onChange={(event) => updateField('district', event.target.value)}
+                  options={districtOptions}
+                  placeholder="Select district"
                   required
                 />
               </div>
 
-              {error && (
-                <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm">
-                  {error}
-                </div>
-              )}
-
-              <Button type="submit" className="w-full" loading={loading}>
-                Verify OTP
-              </Button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  setStep('phone');
-                  setOtp('');
-                  setError('');
-                }}
-                className="w-full mt-3 text-sm text-gray-500 hover:text-gray-700"
-              >
-                Change phone number
-              </button>
-            </form>
-          )}
-
-          {step === 'profile' && (
-            <div className="space-y-4">
-              <h3 className="font-semibold text-gray-900 mb-4">
-                {role === 'employer' ? 'Company Details' : 'Your Details'}
-              </h3>
-
-              {role === 'seeker' ? (
-                <Input
-                  label="Your Full Name"
-                  value={formData.full_name}
-                  onChange={(event) =>
-                    setFormData({ ...formData, full_name: event.target.value })
-                  }
-                  placeholder="Enter your name"
-                />
-              ) : (
-                <Input
-                  label="Company / Business Name"
-                  value={formData.company_name}
-                  onChange={(event) =>
-                    setFormData({ ...formData, company_name: event.target.value })
-                  }
-                  placeholder="Enter company name"
-                />
-              )}
-
-              <Select
-                label="District"
-                value={formData.district}
-                onChange={(event) =>
-                  setFormData({ ...formData, district: event.target.value })
-                }
-                options={[
-                  { value: 'patna', label: 'Patna' },
-                  { value: 'gaya', label: 'Gaya' },
-                  { value: 'bhagalpur', label: 'Bhagalpur' },
-                  { value: 'muzaffarpur', label: 'Muzaffarpur' },
-                  { value: 'darbhanga', label: 'Darbhanga' },
-                  { value: 'other', label: 'Other' },
-                ]}
-                placeholder="Select District"
+              <Input
+                label="Password"
+                type="password"
+                autoComplete="new-password"
+                value={formData.password}
+                onChange={(event) => updateField('password', event.target.value)}
+                placeholder="Create a strong password"
+                hint="Use 8+ characters with uppercase, lowercase, number, and special character."
+                minLength={8}
+                required
+              />
+              <Input
+                label="Confirm Password"
+                type="password"
+                autoComplete="new-password"
+                value={formData.confirmPassword}
+                onChange={(event) => updateField('confirmPassword', event.target.value)}
+                placeholder="Re-enter your password"
+                minLength={8}
+                required
               />
 
               {error && (
@@ -345,10 +197,10 @@ export default function RegisterPage() {
                 </div>
               )}
 
-              <Button onClick={handleProfileComplete} className="w-full" loading={loading}>
-                Complete Registration
+              <Button type="submit" className="w-full" loading={loading}>
+                Create Account <ArrowRight className="w-4 h-4 ml-2" />
               </Button>
-            </div>
+            </form>
           )}
         </div>
 
@@ -360,5 +212,62 @@ export default function RegisterPage() {
         </p>
       </div>
     </div>
+  );
+}
+
+function RegistrationChoice({
+  icon,
+  title,
+  description,
+  onClick,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  description: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="w-full p-4 border-2 border-gray-200 rounded-xl flex items-center gap-4 text-left transition-all hover:border-bihar-green hover:bg-bihar-green-bg"
+    >
+      <span className="w-12 h-12 bg-bihar-green-bg rounded-full flex items-center justify-center text-bihar-green">
+        {icon}
+      </span>
+      <span className="flex-1">
+        <span className="block font-semibold text-gray-900">{title}</span>
+        <span className="block text-sm text-gray-500 mt-0.5">{description}</span>
+      </span>
+      <ArrowRight className="w-5 h-5 text-gray-400" />
+    </button>
+  );
+}
+
+function EmailField({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+  return (
+    <Input
+      label="Email Address"
+      type="email"
+      autoComplete="email"
+      value={value}
+      onChange={(event) => onChange(event.target.value)}
+      placeholder="you@example.com"
+      required
+    />
+  );
+}
+
+function PhoneField({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+  return (
+    <Input
+      label="Phone Number"
+      type="tel"
+      autoComplete="tel"
+      value={value}
+      onChange={(event) => onChange(event.target.value)}
+      placeholder="+91 9876543210"
+      required
+    />
   );
 }

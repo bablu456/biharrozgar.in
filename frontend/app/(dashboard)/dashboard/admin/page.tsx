@@ -2,39 +2,33 @@
 
 import { useState, useEffect } from 'react';
 import { Check, X, Users, Briefcase, TrendingUp } from 'lucide-react';
-import { GoogleAccountCard } from '@/components/auth/GoogleAccountCard';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { createClient } from '@/lib/supabase';
+import { apiFetch } from '@/lib/api';
 import { formatDate } from '@/lib/utils';
-import type { Job, Profile } from '@/types';
+import type { Job } from '@/types';
 
 export default function AdminDashboard() {
   const [pendingJobs, setPendingJobs] = useState<Job[]>([]);
   const [stats, setStats] = useState({ totalJobs: 0, activeJobs: 0, totalUsers: 0 });
+  const [adminId, setAdminId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchData = async () => {
-      const supabase = createClient();
-      const { data: { session } } = await supabase.auth.getSession();
-      
-      if (!session) {
-        window.location.href = '/login';
-        return;
-      }
+      const authSession = await apiFetch<{
+        user: { id: string };
+        profile: { role: string };
+      }>('/auth/me');
 
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('role')
-        .eq('id', session.user.id)
-        .single();
-
-      if (profile?.role !== 'admin') {
+      if (authSession.profile.role !== 'admin') {
         window.location.href = '/';
         return;
       }
 
+      setAdminId(authSession.user.id);
+      const supabase = createClient();
       const [jobsRes, profilesRes, approvedJobs] = await Promise.all([
         supabase.from('jobs').select('*').eq('status', 'pending').order('created_at', { ascending: false }),
         supabase.from('profiles').select('id', { count: 'exact' }),
@@ -54,12 +48,15 @@ export default function AdminDashboard() {
   }, []);
 
   const handleApproveJob = async (jobId: string) => {
+    if (!adminId) {
+      return;
+    }
+
     const supabase = createClient();
-    const { data: { session } } = await supabase.auth.getSession();
-    
+
     await supabase.from('jobs').update({
       status: 'approved',
-      approved_by: session?.user.id,
+      approved_by: adminId,
       approved_at: new Date().toISOString(),
     }).eq('id', jobId);
 
@@ -169,9 +166,6 @@ export default function AdminDashboard() {
           )}
         </div>
 
-        <div className="mt-8">
-          <GoogleAccountCard />
-        </div>
       </div>
     </div>
   );

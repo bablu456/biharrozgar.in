@@ -3,7 +3,6 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { Plus, Briefcase, Users, TrendingUp, Star, Zap } from 'lucide-react';
-import { GoogleAccountCard } from '@/components/auth/GoogleAccountCard';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { apiFetch } from '@/lib/api';
@@ -18,7 +17,9 @@ export default function EmployerDashboard() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const profile = await apiFetch<{ full_name: string; role: string; is_premium: boolean }>('/auth/me').then(res => res.profile);
+        const profile = await apiFetch<{
+          profile: { full_name: string; role: string; is_premium: boolean };
+        }>('/auth/me').then((res) => res.profile);
         setUser(profile);
 
         const jobsData = await apiFetch<Job[]>('/jobs/my');
@@ -195,9 +196,6 @@ export default function EmployerDashboard() {
           )}
         </div>
 
-        <div className="mt-8">
-          <GoogleAccountCard />
-        </div>
       </div>
     </div>
   );

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
 from datetime import timedelta
 
 from fastapi import HTTPException, status
@@ -28,10 +29,11 @@ from app.schemas.auth import (
     UserRead,
 )
 from app.schemas.profile import ProfileRead, ProfileUpdate
-from app.services.otp_delivery import send_otp_code
+from app.services.otp_delivery import send_email_otp_code, send_phone_otp_code
 
 settings = get_settings()
 MAX_OTP_ATTEMPTS = 5
+OTPDelivery = Callable[[str, str, str], Awaitable[None]]
 
 
 def build_authenticated_session(user: User) -> AuthenticatedSession:
@@ -87,27 +89,27 @@ def _build_token_pair(user: User) -> TokenPair:
 async def _request_otp(
     session: AsyncSession,
     *,
-    phone_number: str,
+    recipient: str,
     purpose: OtpPurpose,
+    existing_user: User | None,
     must_have_existing_user: bool,
+    delivery: OTPDelivery,
 ) -> OTPChallengeResponse:
-    existing_user = await user_crud.get_by_phone(session, phone_number)
-
     if must_have_existing_user and existing_user is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="No account exists for this phone number.",
+            detail="No account exists for this email address or phone number.",
         )
 
     if not must_have_existing_user and existing_user is not None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="An account with this phone number already exists.",
+            detail="An account with this email address or phone number already exists.",
         )
 
     latest_otp = await otp_crud.get_latest_pending(
         session,
-        phone_number=phone_number,
+        recipient=recipient,
         purpose=purpose,
     )
     if latest_otp is not None and latest_otp.created_at is not None:
@@ -122,7 +124,7 @@ async def _request_otp(
     otp_code = generate_otp_code(settings.otp_length)
     expires_at = utc_now() + timedelta(minutes=settings.otp_expire_minutes)
     code_hash = hash_otp_code(
-        phone_number=phone_number,
+        recipient=recipient,
         purpose=purpose.value,
         otp_code=otp_code,
         secret_key=settings.otp_secret_key.get_secret_value(),
@@ -130,19 +132,19 @@ async def _request_otp(
 
     await otp_crud.create(
         session,
-        phone_number=phone_number,
+        recipient=recipient,
         purpose=purpose,
         code_hash=code_hash,
         expires_at=expires_at,
     )
-    await send_otp_code(
-        phone_number=phone_number,
-        otp_code=otp_code,
-        purpose=purpose.value,
-    )
+    await delivery(recipient, otp_code, purpose.value)
     await session.commit()
 
-    debug_otp_code = otp_code if settings.debug else None
+    debug_otp_code = (
+        otp_code
+        if settings.debug or settings.environment.strip().lower() == "development"
+        else None
+    )
     return OTPChallengeResponse(
         message="OTP generated successfully.",
         expires_in_seconds=settings.otp_expire_minutes * 60,
@@ -156,11 +158,14 @@ async def request_registration_otp(
     *,
     phone_number: str,
 ) -> OTPChallengeResponse:
+    existing_user = await user_crud.get_by_phone(session, phone_number)
     return await _request_otp(
         session,
-        phone_number=phone_number,
+        recipient=phone_number,
         purpose=OtpPurpose.REGISTER,
+        existing_user=existing_user,
         must_have_existing_user=False,
+        delivery=send_phone_otp_code,
     )
 
 
@@ -169,30 +174,49 @@ async def request_login_otp(
     *,
     phone_number: str,
 ) -> OTPChallengeResponse:
+    existing_user = await user_crud.get_by_phone(session, phone_number)
     return await _request_otp(
         session,
-        phone_number=phone_number,
+        recipient=phone_number,
         purpose=OtpPurpose.LOGIN,
+        existing_user=existing_user,
         must_have_existing_user=True,
+        delivery=send_phone_otp_code,
+    )
+
+
+async def request_email_login_otp(
+    session: AsyncSession,
+    *,
+    email: str,
+) -> OTPChallengeResponse:
+    existing_user = await user_crud.get_by_email(session, email)
+    return await _request_otp(
+        session,
+        recipient=email,
+        purpose=OtpPurpose.LOGIN,
+        existing_user=existing_user,
+        must_have_existing_user=True,
+        delivery=send_email_otp_code,
     )
 
 
 async def _verify_otp(
     session: AsyncSession,
     *,
-    phone_number: str,
+    recipient: str,
     otp_code: str,
     purpose: OtpPurpose,
 ) -> None:
     otp_record = await otp_crud.get_latest_pending(
         session,
-        phone_number=phone_number,
+        recipient=recipient,
         purpose=purpose,
     )
     if otp_record is None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="No active OTP was found for this phone number.",
+            detail="No active OTP was found for this email address or phone number.",
         )
 
     now = utc_now()
@@ -209,7 +233,7 @@ async def _verify_otp(
         )
 
     is_valid = verify_otp_code(
-        phone_number=phone_number,
+        recipient=recipient,
         purpose=purpose.value,
         otp_code=otp_code,
         expected_hash=otp_record.code_hash,
@@ -240,7 +264,7 @@ async def verify_registration(
 
     await _verify_otp(
         session,
-        phone_number=payload.phone,
+        recipient=payload.phone,
         otp_code=payload.otp_code,
         purpose=OtpPurpose.REGISTER,
     )
@@ -291,7 +315,44 @@ async def verify_login(
 
     await _verify_otp(
         session,
-        phone_number=phone_number,
+        recipient=phone_number,
+        otp_code=otp_code,
+        purpose=OtpPurpose.LOGIN,
+    )
+    await user_crud.mark_logged_in(session, user, verify_phone=True)
+    await session.commit()
+
+    fresh_user = await user_crud.get_by_id(session, user.id)
+    if fresh_user is None:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="The account exists but could not be reloaded.",
+        )
+
+    auth_session = build_authenticated_session(fresh_user)
+    return AuthResponse(
+        user=auth_session.user,
+        profile=auth_session.profile,
+        tokens=_build_token_pair(fresh_user),
+    )
+
+
+async def verify_email_login(
+    session: AsyncSession,
+    *,
+    email: str,
+    otp_code: str,
+) -> AuthResponse:
+    user = await user_crud.get_by_email(session, email)
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No account exists for this email address.",
+        )
+
+    await _verify_otp(
+        session,
+        recipient=email,
         otp_code=otp_code,
         purpose=OtpPurpose.LOGIN,
     )

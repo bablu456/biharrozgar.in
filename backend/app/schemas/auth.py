@@ -17,6 +17,7 @@ PASSWORD_SPECIAL_PATTERN = re.compile(r"[^A-Za-z0-9]")
 
 
 class UserRegisterRequest(BaseModel):
+    full_name: str = Field(..., min_length=2, max_length=255)
     email: str = Field(..., max_length=255, examples=["user@example.com"])
     phone_number: str = Field(
         ...,
@@ -24,6 +25,16 @@ class UserRegisterRequest(BaseModel):
         examples=["9876543210", "+919876543210"],
     )
     password: str = Field(..., min_length=8, max_length=128)
+    role: UserRole = Field(default=UserRole.SEEKER)
+    district: str = Field(..., min_length=2, max_length=100)
+
+    @field_validator("full_name", "district")
+    @classmethod
+    def strip_required_strings(cls, value: str) -> str:
+        cleaned = value.strip()
+        if not cleaned:
+            raise ValueError("This field is required.")
+        return cleaned
 
     @field_validator("email")
     @classmethod
@@ -51,6 +62,13 @@ class UserRegisterRequest(BaseModel):
             raise ValueError("Password must include at least one number.")
         if not PASSWORD_SPECIAL_PATTERN.search(value):
             raise ValueError("Password must include at least one special character.")
+        return value
+
+    @field_validator("role")
+    @classmethod
+    def validate_registration_role(cls, value: UserRole) -> UserRole:
+        if value == UserRole.ADMIN:
+            raise ValueError("Admin accounts cannot be created through registration.")
         return value
 
 
@@ -100,6 +118,34 @@ class OTPRequest(PhoneNumberPayload):
     pass
 
 
+class EmailPayload(BaseModel):
+    email: str = Field(..., max_length=255, examples=["user@example.com"])
+
+    @field_validator("email")
+    @classmethod
+    def normalize_email(cls, value: str) -> str:
+        email = value.strip().lower()
+        if not email or "@" not in email:
+            raise ValueError("Email must be a valid email address.")
+        return email
+
+
+class EmailOTPRequest(EmailPayload):
+    pass
+
+
+class EmailOTPVerifyPayload(EmailPayload):
+    otp_code: str = Field(..., min_length=6, max_length=6, examples=["123456"])
+
+    @field_validator("otp_code")
+    @classmethod
+    def validate_otp_code(cls, value: str) -> str:
+        cleaned = value.strip()
+        if len(cleaned) != 6 or not cleaned.isdigit():
+            raise ValueError("OTP code must be a 6-digit numeric value.")
+        return cleaned
+
+
 class OTPVerifyPayload(PhoneNumberPayload):
     otp_code: str = Field(..., min_length=6, max_length=6, examples=["123456"])
 
@@ -128,6 +174,9 @@ class RegisterVerifyRequest(OTPVerifyPayload):
 
     @model_validator(mode="after")
     def validate_name_for_role(self) -> "RegisterVerifyRequest":
+        if self.role == UserRole.ADMIN:
+            raise ValueError("Admin accounts cannot be created through registration.")
+
         if self.role == UserRole.EMPLOYER and not self.company_name:
             raise ValueError("company_name is required when registering an employer account.")
 

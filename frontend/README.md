@@ -37,31 +37,11 @@ npm run dev
 
 5. Visit `http://localhost:3000`.
 
-## Google Login Setup
+## Authentication
 
-To enable Google sign-in and Google account linking:
-
-1. In Google Cloud Console, create an OAuth 2.0 Web Application.
-2. Add your app origins, for example:
-   - `http://localhost:3000`
-   - `https://biharrozgar.in`
-3. Add the Supabase redirect URI:
-   - `https://<YOUR_SUPABASE_PROJECT_REF>.supabase.co/auth/v1/callback`
-4. In Supabase Dashboard:
-   - Go to `Authentication -> Providers -> Google`
-   - Enable Google
-   - Paste the Google client ID and secret
-5. In `Authentication -> URL Configuration`, add your app callback URLs:
-   - `http://localhost:3000/auth/callback`
-   - `https://biharrozgar.in/auth/callback`
-   - add any extra local dev ports you use, such as `http://localhost:3003/auth/callback`
-6. For account linking, also enable `Manual Linking` in Supabase Auth settings.
-
-The app now supports:
-
-- Google login from `frontend/app/(auth)/login/page.tsx`
-- Google signup plus first-time profile completion from `frontend/app/(auth)/register/page.tsx`
-- Safe Google account linking for signed-in users from the dashboard pages
+Authentication is handled by the FastAPI backend using email, phone OTP, and
+password credentials. Direct social login and account linking are intentionally
+not part of the authentication flow.
 
 ## Project Structure
 

@@ -47,21 +47,21 @@ def generate_otp_code(length: int) -> str:
     return "".join(secrets.choice(alphabet) for _ in range(length))
 
 
-def hash_otp_code(*, phone_number: str, purpose: str, otp_code: str, secret_key: str) -> str:
-    payload = f"{phone_number}:{purpose}:{otp_code}".encode("utf-8")
+def hash_otp_code(*, recipient: str, purpose: str, otp_code: str, secret_key: str) -> str:
+    payload = f"{recipient}:{purpose}:{otp_code}".encode("utf-8")
     return hmac.new(secret_key.encode("utf-8"), payload, hashlib.sha256).hexdigest()
 
 
 def verify_otp_code(
     *,
-    phone_number: str,
+    recipient: str,
     purpose: str,
     otp_code: str,
     expected_hash: str,
     secret_key: str,
 ) -> bool:
     computed_hash = hash_otp_code(
-        phone_number=phone_number,
+        recipient=recipient,
         purpose=purpose,
         otp_code=otp_code,
         secret_key=secret_key,

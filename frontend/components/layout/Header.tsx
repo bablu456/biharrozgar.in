@@ -1,27 +1,50 @@
 'use client';
 
 import Link from 'next/link';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Menu, X, LogOut } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { getDashboardRoute } from '@/lib/auth';
-import { createClient } from '@/lib/supabase';
+import { apiFetch } from '@/lib/api';
+import { logout } from '@/lib/api-auth';
 
-interface HeaderProps {
-  user?: {
-    id: string;
-    full_name: string;
-    role: string;
-  } | null;
+type HeaderUser = {
+  id: string;
+  full_name: string;
+  role: string;
+};
+
+interface AuthSessionResponse {
+  user: { id: string };
+  profile: { full_name: string | null; role: string };
 }
 
-export function Header({ user }: HeaderProps) {
+export function Header() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [user, setUser] = useState<HeaderUser | null>(null);
   const dashboardHref = getDashboardRoute(user?.role);
 
-  const handleSignOut = async () => {
-    const supabase = createClient();
-    await supabase.auth.signOut();
+  useEffect(() => {
+    const hasSession =
+      localStorage.getItem('access_token') || localStorage.getItem('refresh_token');
+    if (!hasSession) {
+      return;
+    }
+
+    apiFetch<AuthSessionResponse>('/auth/me')
+      .then((session) => {
+        setUser({
+          id: session.user.id,
+          full_name: session.profile.full_name || 'User',
+          role: session.profile.role,
+        });
+      })
+      .catch(() => setUser(null));
+  }, []);
+
+  const handleSignOut = () => {
+    logout();
+    setUser(null);
     window.location.href = '/';
   };
 
