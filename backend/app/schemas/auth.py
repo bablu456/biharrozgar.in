@@ -229,3 +229,52 @@ class AuthenticatedSession(BaseModel):
 
 class AuthResponse(AuthenticatedSession):
     tokens: TokenPair
+
+
+class ForgotPasswordRequest(BaseModel):
+    email: str = Field(..., max_length=255, examples=["user@example.com"])
+
+    @field_validator("email")
+    @classmethod
+    def normalize_email(cls, value: str) -> str:
+        email = value.strip().lower()
+        if not email or "@" not in email:
+            raise ValueError("Email must be a valid email address.")
+        return email
+
+
+class ForgotPasswordReset(BaseModel):
+    email: str = Field(..., max_length=255, examples=["user@example.com"])
+    otp_code: str = Field(..., min_length=6, max_length=6, examples=["123456"])
+    new_password: str = Field(..., min_length=8, max_length=128)
+
+    @field_validator("email")
+    @classmethod
+    def normalize_email(cls, value: str) -> str:
+        email = value.strip().lower()
+        if not email or "@" not in email:
+            raise ValueError("Email must be a valid email address.")
+        return email
+
+    @field_validator("otp_code")
+    @classmethod
+    def validate_otp_code(cls, value: str) -> str:
+        cleaned = value.strip()
+        if len(cleaned) != 6 or not cleaned.isdigit():
+            raise ValueError("OTP code must be a 6-digit numeric value.")
+        return cleaned
+
+    @field_validator("new_password")
+    @classmethod
+    def validate_password_strength(cls, value: str) -> str:
+        if len(value) < 8:
+            raise ValueError("Password must be at least 8 characters long.")
+        if not PASSWORD_UPPERCASE_PATTERN.search(value):
+            raise ValueError("Password must include at least one uppercase letter.")
+        if not PASSWORD_LOWERCASE_PATTERN.search(value):
+            raise ValueError("Password must include at least one lowercase letter.")
+        if not PASSWORD_NUMBER_PATTERN.search(value):
+            raise ValueError("Password must include at least one number.")
+        if not PASSWORD_SPECIAL_PATTERN.search(value):
+            raise ValueError("Password must include at least one special character.")
+        return value

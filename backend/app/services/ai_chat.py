@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.core.openrouter_models import CHAT_FALLBACK_MODEL_IDS
 from app.schemas.chat import ChatMessage
 from app.services.ai_gateway import AIProviderUnavailableError, OpenRouterGateway
@@ -32,9 +34,22 @@ class OpenRouterAIService:
         self,
         messages: Sequence[ChatMessage],
         model_id: str,
+        db: AsyncSession,
     ) -> str:
+        # Get the user's latest message to query the vector DB
+        latest_message = messages[-1].content if messages else ""
+        
+        # Retrieve relevant context
+        from app.services.retrieval import get_relevant_context
+        context = await get_relevant_context(latest_message, db)
+        
+        # Construct the final system prompt with context
+        system_prompt = ROZGAR_MITRA_SYSTEM_PROMPT
+        if context:
+            system_prompt += f"\n\nAnswer the user based ONLY on the following context. If the answer is not in the context, say you don't know but offer to help them search.\nCONTEXT:\n{context}"
+
         payload_messages = [
-            {"role": "system", "content": ROZGAR_MITRA_SYSTEM_PROMPT},
+            {"role": "system", "content": system_prompt},
             *[
                 {"role": message.role, "content": message.content}
                 for message in messages

@@ -16,6 +16,10 @@ class ProfileRead(BaseModel):
     full_name: str | None = None
     role: UserRole
     district: str | None = None
+    city: str | None = None
+    gender: str | None = None
+    education: str | None = None
+    bio: str | None = None
     skills: list[str] | None = None
     experience_years: int | None = None
     whatsapp_notifications: bool
@@ -27,14 +31,31 @@ class ProfileRead(BaseModel):
     updated_at: datetime
 
 
-class ProfileUpdate(BaseModel):
+class ProfileResponse(BaseModel):
+    name: str | None = None
+    email: str
+    phone: str | None = None
+    district: str | None = None
+    city: str | None = None
+    gender: str | None = None
+    education: str | None = None
+    bio: str | None = None
+    skills: list[str] | None = None
+    experience_years: int | None = None
+    resume_url: str | None = None
+
+
+class ProfileUpdateRequest(BaseModel):
     full_name: str | None = Field(default=None, min_length=2, max_length=255)
     district: str | None = Field(default=None, min_length=2, max_length=100)
+    city: str | None = Field(default=None, min_length=2, max_length=100)
+    gender: str | None = Field(default=None, max_length=20)
+    education: str | None = Field(default=None, max_length=255)
     bio: str | None = Field(default=None, max_length=5000)
     skills: list[str] | None = Field(default=None, max_length=30)
     experience_years: int | None = Field(default=None, ge=0, le=60)
 
-    @field_validator("full_name", "district", "bio", mode="before")
+    @field_validator("full_name", "district", "city", "gender", "education", "bio", mode="before")
     @classmethod
     def strip_optional_strings(cls, value: str | None) -> str | None:
         if value is None:

@@ -194,15 +194,25 @@ export default function LoginPage() {
                 placeholder="you@example.com"
                 required
               />
-              <Input
-                label="Password"
-                type="password"
-                autoComplete="current-password"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                placeholder="Enter your password"
-                required
-              />
+              <div className="space-y-1">
+                <Input
+                  label="Password"
+                  type="password"
+                  autoComplete="current-password"
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  placeholder="Enter your password"
+                  required
+                />
+                <div className="flex justify-end">
+                  <Link 
+                    href="/forgot-password" 
+                    className="text-xs text-gray-500 hover:text-bihar-green hover:underline"
+                  >
+                    Forgot Password?
+                  </Link>
+                </div>
+              </div>
               <ErrorMessage message={error} />
               <Button type="submit" className="w-full" loading={loading}>
                 Login with Password <ArrowRight className="w-4 h-4 ml-2" />

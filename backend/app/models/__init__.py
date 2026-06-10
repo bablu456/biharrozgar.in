@@ -4,6 +4,7 @@ from app.models.base import Base
 from app.models.category import Category
 from app.models.job import Job
 from app.models.job_embedding import JobEmbedding
+from app.models.knowledge_chunk import KnowledgeChunk
 from app.models.location import District
 from app.models.profile import Profile
 from app.models.recommendation import JobRecommendation
@@ -16,6 +17,7 @@ __all__ = [
     "Category",
     "Job",
     "JobEmbedding",
+    "KnowledgeChunk",
     "District",
     "JobRecommendation",
     "Profile",

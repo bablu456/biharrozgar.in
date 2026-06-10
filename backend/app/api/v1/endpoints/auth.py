@@ -20,6 +20,8 @@ from app.schemas.auth import (
     AuthenticatedSession,
     EmailOTPRequest,
     EmailOTPVerifyPayload,
+    ForgotPasswordRequest,
+    ForgotPasswordReset,
     LoginVerifyRequest,
     OTPChallengeResponse,
     OTPRequest,
@@ -175,16 +177,23 @@ async def login_user(
     )
 
 
+from fastapi import BackgroundTasks
+from app.services.email_service import send_otp_email
+from app.services.otp_delivery import send_phone_otp_code
+
 @router.post("/login/request-otp", include_in_schema=False)
 @router.post("/login/phone/request-otp", response_model=OTPChallengeResponse)
 async def request_phone_login_otp(
     payload: OTPRequest,
     session: DatabaseSession,
+    background_tasks: BackgroundTasks,
 ) -> OTPChallengeResponse:
-    return await auth_service.request_login_otp(
+    challenge, otp_code = await auth_service.request_login_otp(
         session,
         phone_number=payload.phone,
     )
+    background_tasks.add_task(send_phone_otp_code, payload.phone, otp_code, "login")
+    return challenge
 
 
 @router.post("/login/verify-otp", include_in_schema=False)
@@ -204,11 +213,14 @@ async def verify_phone_login_otp(
 async def request_email_login_otp(
     payload: EmailOTPRequest,
     session: DatabaseSession,
+    background_tasks: BackgroundTasks,
 ) -> OTPChallengeResponse:
-    return await auth_service.request_email_login_otp(
+    challenge, otp_code = await auth_service.request_email_login_otp(
         session,
         email=payload.email,
     )
+    background_tasks.add_task(send_otp_email, payload.email, otp_code)
+    return challenge
 
 
 @router.post("/login/email/verify-otp", response_model=AuthResponse)
@@ -237,3 +249,32 @@ async def refresh_access_token(
 @router.get("/me", response_model=AuthenticatedSession)
 async def read_current_session(current_user: CurrentUser) -> AuthenticatedSession:
     return auth_service.build_authenticated_session(current_user)
+
+
+@router.post("/forgot-password/request", response_model=OTPChallengeResponse)
+async def request_forgot_password(
+    payload: ForgotPasswordRequest,
+    session: DatabaseSession,
+    background_tasks: BackgroundTasks,
+) -> OTPChallengeResponse:
+    challenge, otp_code = await auth_service.request_forgot_password_otp(
+        session,
+        email=payload.email,
+    )
+    if otp_code:
+        background_tasks.add_task(send_otp_email, payload.email, otp_code)
+    return challenge
+
+
+@router.post("/forgot-password/reset", status_code=status.HTTP_200_OK)
+async def reset_forgot_password(
+    payload: ForgotPasswordReset,
+    session: DatabaseSession,
+) -> dict:
+    await auth_service.verify_and_reset_password(
+        session,
+        email=payload.email,
+        otp_code=payload.otp_code,
+        new_password=payload.new_password,
+    )
+    return {"message": "Password successfully reset."}

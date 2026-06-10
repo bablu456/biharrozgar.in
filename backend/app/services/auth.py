@@ -28,7 +28,7 @@ from app.schemas.auth import (
     TokenPair,
     UserRead,
 )
-from app.schemas.profile import ProfileRead, ProfileUpdate
+from app.schemas.profile import ProfileRead, ProfileUpdateRequest
 from app.services.otp_delivery import send_email_otp_code, send_phone_otp_code
 
 settings = get_settings()
@@ -93,8 +93,7 @@ async def _request_otp(
     purpose: OtpPurpose,
     existing_user: User | None,
     must_have_existing_user: bool,
-    delivery: OTPDelivery,
-) -> OTPChallengeResponse:
+) -> tuple[OTPChallengeResponse, str]:
     if must_have_existing_user and existing_user is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -137,7 +136,6 @@ async def _request_otp(
         code_hash=code_hash,
         expires_at=expires_at,
     )
-    await delivery(recipient, otp_code, purpose.value)
     await session.commit()
 
     debug_otp_code = (
@@ -150,14 +148,14 @@ async def _request_otp(
         expires_in_seconds=settings.otp_expire_minutes * 60,
         retry_after_seconds=settings.otp_resend_cooldown_seconds,
         debug_otp_code=debug_otp_code,
-    )
+    ), otp_code
 
 
 async def request_registration_otp(
     session: AsyncSession,
     *,
     phone_number: str,
-) -> OTPChallengeResponse:
+) -> tuple[OTPChallengeResponse, str]:
     existing_user = await user_crud.get_by_phone(session, phone_number)
     return await _request_otp(
         session,
@@ -165,7 +163,6 @@ async def request_registration_otp(
         purpose=OtpPurpose.REGISTER,
         existing_user=existing_user,
         must_have_existing_user=False,
-        delivery=send_phone_otp_code,
     )
 
 
@@ -173,7 +170,7 @@ async def request_login_otp(
     session: AsyncSession,
     *,
     phone_number: str,
-) -> OTPChallengeResponse:
+) -> tuple[OTPChallengeResponse, str]:
     existing_user = await user_crud.get_by_phone(session, phone_number)
     return await _request_otp(
         session,
@@ -181,7 +178,6 @@ async def request_login_otp(
         purpose=OtpPurpose.LOGIN,
         existing_user=existing_user,
         must_have_existing_user=True,
-        delivery=send_phone_otp_code,
     )
 
 
@@ -189,7 +185,7 @@ async def request_email_login_otp(
     session: AsyncSession,
     *,
     email: str,
-) -> OTPChallengeResponse:
+) -> tuple[OTPChallengeResponse, str]:
     existing_user = await user_crud.get_by_email(session, email)
     return await _request_otp(
         session,
@@ -197,7 +193,6 @@ async def request_email_login_otp(
         purpose=OtpPurpose.LOGIN,
         existing_user=existing_user,
         must_have_existing_user=True,
-        delivery=send_email_otp_code,
     )
 
 
@@ -402,7 +397,7 @@ async def update_current_profile(
     session: AsyncSession,
     *,
     user: User,
-    payload: ProfileUpdate,
+    payload: ProfileUpdateRequest,
 ) -> AuthenticatedSession:
     if user.profile is None:
         raise HTTPException(
@@ -423,3 +418,55 @@ async def update_current_profile(
         )
 
     return build_authenticated_session(fresh_user)
+
+
+async def request_forgot_password_otp(
+    session: AsyncSession,
+    *,
+    email: str,
+) -> tuple[OTPChallengeResponse, str]:
+    user = await user_crud.get_by_email(session, email)
+    if user is None:
+        # Prevent email enumeration by returning a fake success response
+        return OTPChallengeResponse(
+            message="If an account with this email exists, an OTP has been sent.",
+            expires_in_seconds=settings.otp_expire_minutes * 60,
+            retry_after_seconds=settings.otp_resend_cooldown_seconds,
+        ), ""
+
+    challenge, otp_code = await _request_otp(
+        session,
+        recipient=email,
+        purpose=OtpPurpose.PASSWORD_RESET,
+        existing_user=user,
+        must_have_existing_user=True,
+    )
+    challenge.message = "If an account with this email exists, an OTP has been sent."
+    return challenge, otp_code
+
+
+from app.core.security import get_password_hash
+
+async def verify_and_reset_password(
+    session: AsyncSession,
+    *,
+    email: str,
+    otp_code: str,
+    new_password: str,
+) -> None:
+    user = await user_crud.get_by_email(session, email)
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No account exists for this email address.",
+        )
+
+    await _verify_otp(
+        session,
+        recipient=email,
+        otp_code=otp_code,
+        purpose=OtpPurpose.PASSWORD_RESET,
+    )
+    
+    user.hashed_password = get_password_hash(new_password)
+    await session.commit()

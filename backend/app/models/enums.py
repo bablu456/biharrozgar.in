@@ -12,6 +12,7 @@ class UserRole(str, Enum):
 class OtpPurpose(str, Enum):
     REGISTER = "register"
     LOGIN = "login"
+    PASSWORD_RESET = "password_reset"
 
 
 class JobType(str, Enum):

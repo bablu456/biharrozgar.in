@@ -59,7 +59,7 @@ export default function SeekerDashboard() {
       </div>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="grid md:grid-cols-3 gap-6 mb-8">
+        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
           <Link href="/jobs" className="bg-white rounded-xl border border-gray-200 p-6 hover:shadow-md transition-shadow">
             <div className="flex items-center gap-4">
               <div className="w-12 h-12 bg-bihar-green-bg rounded-full flex items-center justify-center">
@@ -92,6 +92,18 @@ export default function SeekerDashboard() {
               <div>
                 <div className="text-2xl font-bold text-gray-900">Job Alerts</div>
                 <div className="text-sm text-gray-500">Get notified</div>
+              </div>
+            </div>
+          </Link>
+
+          <Link href="/profile" className="bg-white rounded-xl border border-gray-200 p-6 hover:shadow-md transition-shadow">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 bg-purple-50 rounded-full flex items-center justify-center">
+                <User className="w-6 h-6 text-purple-500" />
+              </div>
+              <div>
+                <div className="text-2xl font-bold text-gray-900">Profile</div>
+                <div className="text-sm text-gray-500">Update details</div>
               </div>
             </div>
           </Link>

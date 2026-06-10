@@ -45,12 +45,11 @@ class Settings(BaseSettings):
     openrouter_embedding_fallback_models: list[str] = Field(default_factory=lambda: ["text-embedding-3-small"])
     openrouter_embedding_dimensions: int = 1536
     openrouter_embedding_batch_size: int = 32
-    smtp_host: str = ""
-    smtp_port: int = 587
-    smtp_username: str = ""
-    smtp_password: SecretStr = SecretStr("")
-    smtp_from_email: str = ""
-    smtp_use_tls: bool = True
+    mail_host: str = "smtp.gmail.com"
+    mail_port: int = 587
+    mail_username: str = ""
+    mail_password: str = ""
+    mail_from: str = ""
     jwt_algorithm: str = "HS256"
 
     access_token_expire_minutes: int = 30
