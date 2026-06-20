@@ -43,7 +43,7 @@ async def create_job(
     """
     Create new job.
     """
-    if current_user.role != "employer":
+    if not current_user.profile or current_user.profile.role != "employer":
         raise HTTPException(status_code=403, detail="Only employers can post jobs")
         
     job = await crud_job.create_job(db, obj_in=job_in.model_dump(), employer_id=current_user.id)

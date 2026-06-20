@@ -107,6 +107,72 @@ class OpenRouterGateway:
         )
         raise AIProviderUnavailableError(detail_message)
 
+    async def complete_chat(
+        self,
+        *,
+        messages: Sequence[dict[str, Any]],
+        model_ids: Sequence[str],
+        temperature: float | None = None,
+        max_tokens: int | None = None,
+        tools: list[dict[str, Any]] | None = None,
+        extra_payload: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Returns the complete message dict, supporting tool_calls."""
+        if not self.api_key:
+            raise AIConfigurationError(
+                "OPENROUTER_API_KEY is not configured. Add it to backend/.env or "
+                "the backend environment, then restart the server."
+            )
+
+        candidate_model_ids = _deduplicate_models(model_ids)
+        if not candidate_model_ids:
+            raise AIConfigurationError("At least one model id is required.")
+
+        headers = self._build_headers()
+        payload_messages = [dict(item) for item in messages]
+        unavailable_details: list[str] = []
+
+        async with httpx.AsyncClient(timeout=self.timeout_seconds) as client:
+            for model_id in candidate_model_ids:
+                payload: dict[str, Any] = {
+                    "model": model_id,
+                    "messages": payload_messages,
+                }
+                if temperature is not None:
+                    payload["temperature"] = temperature
+                if max_tokens is not None:
+                    payload["max_tokens"] = max_tokens
+                if tools is not None:
+                    payload["tools"] = tools
+                if extra_payload:
+                    payload.update(extra_payload)
+
+                try:
+                    response = await self._post_with_retries(
+                        client=client,
+                        url=self.chat_completions_url,
+                        headers=headers,
+                        payload=payload,
+                        model_id=model_id,
+                    )
+                except AIProviderUnavailableError as exc:
+                    unavailable_details.append(str(exc))
+                    continue
+
+                data = response.json()
+                try:
+                    message = data["choices"][0]["message"]
+                    return message
+                except (KeyError, IndexError, TypeError):
+                    unavailable_details.append(f"{model_id}: invalid completion message structure")
+
+        detail_message = (
+            "All configured AI models are unavailable or returned invalid output. "
+            + " | ".join(unavailable_details)
+        )
+        raise AIProviderUnavailableError(detail_message)
+
+
     async def embed_texts(
         self,
         *,

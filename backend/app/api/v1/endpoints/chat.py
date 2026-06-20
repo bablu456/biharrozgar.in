@@ -7,6 +7,7 @@ from fastapi import APIRouter, HTTPException, status
 
 from app.schemas.chat import ChatRequest
 from app.dependencies.database import DatabaseSession
+from app.dependencies.auth import CurrentUser
 from app.services.ai_chat import AIProviderUnavailableError, OpenRouterAIService
 from app.services.ai_gateway import AIConfigurationError, AIResponseFormatError
 
@@ -15,7 +16,11 @@ router = APIRouter()
 
 @router.post("", include_in_schema=False)
 @router.post("/")
-async def chat_with_rozgar_mitra(chat_request: ChatRequest, db: DatabaseSession) -> dict[str, Any]:
+async def chat_with_rozgar_mitra(
+    chat_request: ChatRequest, 
+    db: DatabaseSession,
+    current_user: CurrentUser,
+) -> dict[str, Any]:
     service = OpenRouterAIService()
 
     try:
@@ -23,6 +28,7 @@ async def chat_with_rozgar_mitra(chat_request: ChatRequest, db: DatabaseSession)
             messages=chat_request.messages,
             model_id=chat_request.model_id,
             db=db,
+            current_user_id=current_user.id,
         )
     except httpx.HTTPStatusError as exc:
         detail = "AI provider request failed."
