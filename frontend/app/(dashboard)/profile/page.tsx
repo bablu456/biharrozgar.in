@@ -37,7 +37,19 @@ interface ProfileResponse {
   resume_url: string | null;
 }
 
+import { Suspense } from 'react';
+
 export default function ProfilePage() {
+  return (
+    // Next.js requires any component using 'useSearchParams' to be wrapped in a Suspense boundary 
+    // to ensure client-side rendering doesn't break static generation.
+    <Suspense fallback={<div className="flex h-[70vh] items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-indigo-600" /></div>}>
+      <ProfileContent />
+    </Suspense>
+  );
+}
+
+function ProfileContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   
