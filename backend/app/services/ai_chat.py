@@ -11,7 +11,9 @@ from app.services.ai_tools import (
     SEARCH_JOBS_TOOL_SCHEMA, 
     search_jobs_in_db,
     UPDATE_PROFILE_TOOL_SCHEMA,
-    update_user_profile_via_ai
+    update_user_profile_via_ai,
+    APPLY_FOR_JOB_TOOL_SCHEMA,
+    apply_to_job_via_ai
 )
 import json
 from typing import Any
@@ -70,7 +72,7 @@ class OpenRouterAIService:
             messages=payload_messages,
             model_ids=(model_id, *CHAT_FALLBACK_MODEL_IDS),
             temperature=0.3,
-            tools=[SEARCH_JOBS_TOOL_SCHEMA, UPDATE_PROFILE_TOOL_SCHEMA],
+            tools=[SEARCH_JOBS_TOOL_SCHEMA, UPDATE_PROFILE_TOOL_SCHEMA, APPLY_FOR_JOB_TOOL_SCHEMA],
         )
 
         # 2. Check if the response contains tool_calls
@@ -97,6 +99,15 @@ class OpenRouterAIService:
                     skills = arguments.get("skills")
                     bio = arguments.get("bio")
                     db_results = await update_user_profile_via_ai(db, current_user_id, skills=skills, bio=bio)
+            elif tool_name == "apply_for_job":
+                if not current_user_id:
+                    db_results = json.dumps({"message": "Error: User is not logged in, cannot apply for jobs."})
+                else:
+                    job_id = arguments.get("job_id")
+                    if not job_id:
+                        db_results = json.dumps({"message": "Error: job_id is required."})
+                    else:
+                        db_results = await apply_to_job_via_ai(db, current_user_id, job_id)
             
             # 4. Append a new message to the conversation history with role "tool"
             # OpenRouter requires us to append the assistant's tool call request first

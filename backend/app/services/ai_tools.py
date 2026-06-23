@@ -118,3 +118,51 @@ async def update_user_profile_via_ai(
         return json.dumps({"message": "Profile successfully updated with new skills/bio."})
     else:
         return json.dumps({"message": "No changes provided to update."})
+
+APPLY_FOR_JOB_TOOL_SCHEMA = {
+    "type": "function",
+    "function": {
+        "name": "apply_for_job",
+        "description": "Apply for a specific job on behalf of the logged-in user.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "job_id": {
+                    "type": "string",
+                    "description": "The unique identifier (UUID) of the job to apply for.",
+                },
+            },
+            "required": ["job_id"],
+        },
+    },
+}
+
+async def apply_to_job_via_ai(db: AsyncSession, current_user_id: Any, job_id: str) -> str:
+    from app.models.job import Job
+    from app.models.application import Application
+    
+    # 1. Check if the job exists
+    stmt_job = select(Job).where(Job.id == job_id)
+    result_job = await db.execute(stmt_job)
+    job = result_job.scalar_one_or_none()
+    
+    if not job:
+        return json.dumps({"message": "Error: Job does not exist."})
+        
+    # 2. Check if an application already exists
+    stmt_app = select(Application).where(
+        Application.applicant_id == current_user_id, 
+        Application.job_id == job_id
+    )
+    result_app = await db.execute(stmt_app)
+    existing_application = result_app.scalar_one_or_none()
+    
+    if existing_application:
+        return json.dumps({"message": "Error: You have already applied for this job."})
+        
+    # 3. Create the new Application record
+    new_application = Application(job_id=job_id, applicant_id=current_user_id)
+    db.add(new_application)
+    await db.commit()
+    
+    return json.dumps({"message": "Successfully applied for the job."})

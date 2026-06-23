@@ -59,5 +59,29 @@ async def get_current_profile(current_user: Annotated[User, Depends(get_current_
     return current_user.profile
 
 
+async def get_optional_current_user(
+    session: DatabaseSession,
+    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer_scheme)],
+) -> User | None:
+    if credentials is None:
+        return None
+
+    try:
+        payload = decode_jwt_token(
+            token=credentials.credentials,
+            secret_key=settings.jwt_secret_key.get_secret_value(),
+            algorithm=settings.jwt_algorithm,
+            expected_type="access",
+        )
+    except TokenValidationError:
+        return None
+
+    user = await user_crud.get_by_id(session, payload["sub"])
+    if user is None or not user.is_active:
+        return None
+
+    return user
+
 CurrentUser = Annotated[User, Depends(get_current_user)]
 CurrentProfile = Annotated[Profile, Depends(get_current_profile)]
+OptionalCurrentUser = Annotated[User | None, Depends(get_optional_current_user)]

@@ -29,6 +29,7 @@ class Settings(BaseSettings):
     database_url: str = (
         "postgresql+asyncpg://postgres:postgres@localhost:5432/bihar_rozgar"
     )
+    redis_url: str = "redis://localhost:6379"
     cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:3000"])
 
     jwt_secret_key: SecretStr = SecretStr("change-me-access-secret-at-least-32-characters")

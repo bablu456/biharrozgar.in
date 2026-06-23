@@ -8,6 +8,7 @@ import {
   DEFAULT_OPENROUTER_CHAT_MODEL_ID,
   OPENROUTER_CHAT_MODELS,
 } from "@/constants/openrouterModels";
+import { apiFetch, ApiError } from "@/lib/api";
 
 type ChatRole = "user" | "assistant";
 
@@ -63,25 +64,13 @@ export default function AiChatbot() {
     setIsSending(true);
 
     try {
-      const response = await fetch("http://localhost:8000/api/v1/chat", {
+      const data = await apiFetch<{ reply: string }>("/chat", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
         body: JSON.stringify({
           messages: nextMessages,
           model_id: selectedModel,
         }),
       });
-
-      if (!response.ok) {
-        const errorData = await response
-          .json()
-          .catch(() => ({ detail: "Chat request failed." }));
-        throw new Error(normalizeChatErrorDetail(errorData.detail));
-      }
-
-      const data = (await response.json()) as { reply: string };
       setMessages((currentMessages) => [
         ...currentMessages,
         {
@@ -90,11 +79,19 @@ export default function AiChatbot() {
         },
       ]);
     } catch (err) {
-      const message =
-        err instanceof Error
-          ? formatChatError(err.message)
-          : "Kuch error aa gaya. Thodi der baad try kijiye.";
-      setError(message);
+      if (err instanceof ApiError && err.status === 429) {
+        setError("Slow down! You've reached the limit of 5 messages per minute to prevent system overload. Please wait a few seconds.");
+        setMessages(messages);
+        setInput(trimmedInput);
+      } else {
+        const message =
+          err instanceof Error
+            ? formatChatError(err.message)
+            : "Kuch error aa gaya. Thodi der baad try kijiye.";
+        setError(message);
+        setMessages(messages);
+        setInput(trimmedInput);
+      }
     } finally {
       setIsSending(false);
     }

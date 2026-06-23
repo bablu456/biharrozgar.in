@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.v1.router import api_router
 from app.core.config import get_settings
+from app.db.redis import close_redis, init_redis
 from app.db.session import dispose_engine
 
 settings = get_settings()
@@ -14,7 +15,9 @@ settings = get_settings()
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+    await init_redis()
     yield
+    await close_redis()
     await dispose_engine()
 
 
