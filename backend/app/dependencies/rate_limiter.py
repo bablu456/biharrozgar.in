@@ -1,10 +1,14 @@
+import logging
+
 from fastapi import Request, Depends, HTTPException, status
 from redis.asyncio import Redis
+from redis.exceptions import RedisError
 
 from app.dependencies.auth import OptionalCurrentUser
 from app.db.redis import get_redis
 
 MAX_REQUESTS_PER_MINUTE = 5
+logger = logging.getLogger(__name__)
 
 async def check_ai_rate_limit(
     request: Request,
@@ -16,11 +20,15 @@ async def check_ai_rate_limit(
     redis_key = f"rate_limit:ai_chat:user:{identifier}"
     
     # Increment the count for this key
-    request_count = await redis_client.incr(redis_key)
-    
-    # If it's the first request in the window, set the expiration
-    if request_count == 1:
-        await redis_client.expire(redis_key, 60)
+    try:
+        request_count = await redis_client.incr(redis_key)
+
+        # If it's the first request in the window, set the expiration
+        if request_count == 1:
+            await redis_client.expire(redis_key, 60)
+    except RedisError as exc:
+        logger.warning("Skipping AI rate limit because Redis is unavailable: %s", exc)
+        return
         
     if request_count > MAX_REQUESTS_PER_MINUTE:
         raise HTTPException(

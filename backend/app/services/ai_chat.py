@@ -36,6 +36,13 @@ Core rules:
 Your tone must be highly professional, polite, and direct. Avoid excessive emojis. At the very end of EVERY response, you MUST provide 2 to 3 actionable, short follow-up options for the user. You must wrap each option EXACTLY in square brackets like this: [Search Jobs] [Post a Job] [Update Profile]. Do not add any text after these brackets.
 """
 
+FALLBACK_ASSISTANT_REPLY = (
+    "Main abhi clear response generate nahi kar paaya. Aap apna sawaal "
+    "thoda aur detail me dobara bhejiye.\n\n"
+    "[Search Jobs] [Post a Job] [Update Profile]"
+)
+
+
 class OpenRouterAIService:
     def __init__(self) -> None:
         self.gateway = OpenRouterGateway()
@@ -128,8 +135,30 @@ class OpenRouterAIService:
                 model_ids=(model_id, *CHAT_FALLBACK_MODEL_IDS),
                 temperature=0.3,
             )
-            return final_response_message.get("content", "")
+            return _get_assistant_reply_text(final_response_message)
 
         # Normal text response when no tool is called
-        return response_message.get("content", "")
+        return _get_assistant_reply_text(response_message)
 
+
+def _get_assistant_reply_text(message: dict[str, Any]) -> str:
+    content = message.get("content")
+
+    if isinstance(content, str):
+        normalized = content.strip()
+        return normalized or FALLBACK_ASSISTANT_REPLY
+
+    if isinstance(content, list):
+        text_parts: list[str] = []
+        for item in content:
+            if isinstance(item, dict) and item.get("type") == "text":
+                text = item.get("text")
+                if isinstance(text, str):
+                    stripped = text.strip()
+                    if stripped:
+                        text_parts.append(stripped)
+
+        normalized = "\n".join(text_parts).strip()
+        return normalized or FALLBACK_ASSISTANT_REPLY
+
+    return FALLBACK_ASSISTANT_REPLY

@@ -17,6 +17,9 @@ type ChatMessage = {
   content: string;
 };
 
+const FALLBACK_ASSISTANT_MESSAGE =
+  "Main abhi clear response generate nahi kar paaya. Aap apna sawaal thoda aur detail me dobara bhejiye.";
+
 const INITIAL_MESSAGES: ChatMessage[] = [
   {
     role: "assistant",
@@ -64,7 +67,7 @@ export default function AiChatbot() {
     setIsSending(true);
 
     try {
-      const data = await apiFetch<{ reply: string }>("/chat", {
+      const data = await apiFetch<{ reply: string | null }>("/chat", {
         method: "POST",
         body: JSON.stringify({
           messages: nextMessages,
@@ -75,7 +78,7 @@ export default function AiChatbot() {
         ...currentMessages,
         {
           role: "assistant",
-          content: data.reply,
+          content: normalizeAssistantContent(data.reply),
         },
       ]);
     } catch (err) {
@@ -159,17 +162,22 @@ export default function AiChatbot() {
         <AnimatePresence initial={false}>
           {messages.map((message, index) => {
             const isUser = message.role === "user";
+            const rawContent = normalizeChatMessageContent(message.content);
 
-            let displayContent = message.content;
+            let displayContent = rawContent;
             const options: string[] = [];
             
             if (!isUser) {
               const regex = /\[(.*?)\]/g;
               let match;
-              while ((match = regex.exec(message.content)) !== null) {
+              while ((match = regex.exec(rawContent)) !== null) {
                 options.push(match[1]);
               }
-              displayContent = message.content.replace(/\[(.*?)\]/g, "").trim();
+              displayContent = rawContent.replace(/\[(.*?)\]/g, "").trim();
+            }
+
+            if (!displayContent && !isUser) {
+              displayContent = FALLBACK_ASSISTANT_MESSAGE;
             }
 
             return (
@@ -311,4 +319,13 @@ function normalizeChatErrorDetail(detail: unknown): string {
   }
 
   return "Chat request failed.";
+}
+
+function normalizeAssistantContent(content: unknown): string {
+  const normalized = normalizeChatMessageContent(content);
+  return normalized || FALLBACK_ASSISTANT_MESSAGE;
+}
+
+function normalizeChatMessageContent(content: unknown): string {
+  return typeof content === "string" ? content : "";
 }
